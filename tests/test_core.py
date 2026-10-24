@@ -28,8 +28,10 @@ def make_batch(qty=5, hours_left=4.0, storage="HOT", status="AVAILABLE", store_i
 
 def test_model_trains_on_startup_and_beats_baseline(client):
     info = client.get("/api/v1/ml/model-info").json()
-    assert info["ready"] and info["rows"] >= 90 * 4 * 5
-    assert info["metrics"]["mae"] < info["metrics"]["baseline_mae"]
+    assert info["ready"] and info["rows"] >= 365 * 7 * 5
+    m = info["metrics"]
+    assert m["windows"] == 4 and m["mae"] < m["baseline_mae"]
+    assert m["mae_ordinary"] is not None and m["festival_test_rows"] >= 0
 
 
 def test_prediction_explains_rain_and_festival(client):
@@ -48,10 +50,12 @@ def test_zero_surplus_fallback(client):
     assert r["zero_surplus"] and r["ngo_prenotification_qty"] == 0
 
 
-def test_unseen_weather_warns(client):
+def test_rarely_seen_weather_warns(client, monkeypatch):
+    from app.ml.forecaster import forecaster
+    monkeypatch.setitem(forecaster.meta["weather_support"], "Heatwave", 2)
     r = client.post("/api/v1/predict-surplus", json={
         "date": "2026-10-28", "weather_condition": "Heatwave", "temperature": 40, "restaurant_id": 1}).json()
-    assert r["warnings"]
+    assert r["warnings"] and "2 'Heatwave' nights" in r["warnings"][0]
 
 
 # ---------- concurrency ----------
@@ -308,8 +312,8 @@ def test_outlook_lists_upcoming_nights(client, auth):
 def test_calendar_covers_next_five_years():
     from datetime import date
     from app.ml.calendar_data import CALENDAR_RANGE, FESTIVALS, HOLIDAYS
-    assert CALENDAR_RANGE == (date(2026, 1, 1), date(2031, 12, 31))
-    for year in range(2026, 2032):
+    assert CALENDAR_RANGE == (date(2025, 1, 1), date(2031, 12, 31))
+    for year in range(2025, 2032):
         assert HOLIDAYS[date(year, 1, 26)] == "Republic Day"
         assert any("Diwali" in n for d, n in FESTIVALS.items() if d.year == year)
         assert any("Holi" in n for d, n in HOLIDAYS.items() if d.year == year)

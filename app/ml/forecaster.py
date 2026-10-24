@@ -33,6 +33,7 @@ FEATURES = CATEGORICAL + NUMERIC
 BASELINE = {"weather_condition": "Clear", "temperature": 28.0, "is_holiday": 0, "is_festival": 0}
 BASELINE_WEEKDAY = 2  # Wednesday
 VALIDATION_DAYS = 14
+BACKTEST_WINDOWS = 4  # evaluate on the last 8 weeks, one fortnight at a time
 ZERO_SURPLUS_THRESHOLD = 3  # servings
 MIN_SUPPORT = 5  # nights of a weather condition needed before we trust predictions for it
 
@@ -76,25 +77,7 @@ class SurplusForecaster:
         scale = df["historical_avg_footfall"].clip(lower=1) / 100
         y = df["surplus_servings"].astype(float) / scale
 
-        # Chronological hold-out: train on the past, validate on the most recent fortnight.
-        cutoff = pd.to_datetime(df["date"]).max() - pd.Timedelta(days=VALIDATION_DAYS)
-        is_val = pd.to_datetime(df["date"]) > cutoff
-        metrics = {}
-        if is_val.sum() >= 10 and (~is_val).sum() >= 50:
-            p = _new_pipeline().fit(df.loc[~is_val, FEATURES], y[~is_val])
-            # Metrics in servings, the unit operators care about.
-            actual = df.loc[is_val, "surplus_servings"]
-            pred = p.predict(df.loc[is_val, FEATURES]) * scale[is_val]
-            naive = (y[~is_val]).groupby(df.loc[~is_val, "dish_category"]).mean()
-            naive_pred = df.loc[is_val, "dish_category"].map(naive).fillna(y[~is_val].mean()) * scale[is_val]
-            metrics = {
-                "validation_days": VALIDATION_DAYS,
-                "mae": round(float(mean_absolute_error(actual, pred)), 2),
-                "r2": round(float(r2_score(actual, pred)), 3),
-                "baseline_mae": round(float(mean_absolute_error(actual, naive_pred)), 2),
-                "baseline": "per-category historical mean",
-            }
-
+        metrics = self._backtest(df, y, scale)
         pipeline = _new_pipeline().fit(df[FEATURES], y)
         meta = {
             "trained_at": datetime.now().isoformat(timespec="seconds"),
@@ -110,6 +93,50 @@ class SurplusForecaster:
         joblib.dump({"pipeline": pipeline, "meta": meta}, MODEL_PATH)
         log.info("Surplus model trained on %s rows: %s", meta["rows"], metrics)
         return meta
+
+    @staticmethod
+    def _backtest(df: pd.DataFrame, y: pd.Series, scale: pd.Series) -> dict:
+        """Rolling-origin back-test over the most recent BACKTEST_WINDOWS fortnights.
+
+        Each window is predicted by a model trained only on nights before it, and errors are pooled.
+        One 14-night window is too small and too seasonal (a festival fortnight swings it a lot), so we
+        also report ordinary and festival nights separately. Metrics are in servings per row
+        (restaurant x dish category x night).
+        """
+        dates = pd.to_datetime(df["date"])
+        end = dates.max()
+        parts = []
+        for k in range(BACKTEST_WINDOWS):
+            hi = end - pd.Timedelta(days=k * VALIDATION_DAYS)
+            lo = hi - pd.Timedelta(days=VALIDATION_DAYS)
+            train, test = dates <= lo, (dates > lo) & (dates <= hi)
+            if test.sum() < 10 or train.sum() < 50:
+                continue
+            p = _new_pipeline().fit(df.loc[train, FEATURES], y[train])
+            naive = y[train].groupby(df.loc[train, "dish_category"]).mean()
+            parts.append(pd.DataFrame({
+                "actual": df.loc[test, "surplus_servings"],
+                "pred": p.predict(df.loc[test, FEATURES]) * scale[test],
+                "naive": df.loc[test, "dish_category"].map(naive).fillna(y[train].mean()) * scale[test],
+                "festival": df.loc[test, "is_festival"].astype(bool),
+            }))
+        if not parts:
+            return {}
+        r = pd.concat(parts)
+        err = (r["pred"] - r["actual"]).abs()
+        return {
+            "method": f"rolling back-test, {len(parts)} windows x {VALIDATION_DAYS} nights",
+            "windows": len(parts),
+            "validation_days": VALIDATION_DAYS,
+            "test_rows": int(len(r)),
+            "mae": round(float(err.mean()), 2),
+            "r2": round(float(r2_score(r["actual"], r["pred"])), 3),
+            "baseline_mae": round(float(mean_absolute_error(r["actual"], r["naive"])), 2),
+            "baseline": "per-category historical mean",
+            "mae_ordinary": round(float(err[~r["festival"]].mean()), 2),
+            "mae_festival": round(float(err[r["festival"]].mean()), 2) if r["festival"].any() else None,
+            "festival_test_rows": int(r["festival"].sum()),
+        }
 
     def load(self) -> bool:
         if not MODEL_PATH.exists():

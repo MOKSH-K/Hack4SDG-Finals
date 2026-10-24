@@ -4,7 +4,7 @@
 <div x-data="analyticsPage()" x-init="init()">
   <header class="mb-6">
     <p class="text-sm text-ink-muted">Executive SDG Analytics</p>
-    <h1 class="font-display text-3xl font-bold">Impact over the last 90 nights</h1>
+    <h1 class="font-display text-3xl font-bold" x-text="d.timeline?.length > 120 ? 'Impact over the past year' : `Impact over the last ${d.timeline?.length || ''} nights`">Impact</h1>
   </header>
 
   <!-- KPI tiles -->
@@ -86,12 +86,13 @@
         <h2 class="card-title">Forecast model card</h2>
         <span class="text-xs text-ink-dim" x-text="d.model?.trained_at ? 'trained ' + d.model.trained_at.replace('T', ' ') : ''"></span>
       </div>
-      <div class="mt-3 grid grid-cols-3 gap-3 text-center text-sm">
-        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.mae ?? '–'"></div><div class="text-xs text-ink-muted">MAE (servings)</div></div>
-        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.baseline_mae ?? '–'"></div><div class="text-xs text-ink-muted">Naive baseline MAE</div></div>
-        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.r2 ?? '–'"></div><div class="text-xs text-ink-muted">R² (hold-out)</div></div>
+      <div class="mt-3 grid grid-cols-2 gap-3 text-center text-sm sm:grid-cols-4">
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.mae ?? '–'"></div><div class="text-xs text-ink-muted">Avg error (servings)</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.mae_ordinary ?? '–'"></div><div class="text-xs text-ink-muted">Ordinary nights</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.mae_festival ?? '–'"></div><div class="text-xs text-ink-muted">Festival nights</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.baseline_mae ?? '–'"></div><div class="text-xs text-ink-muted">Simple average</div></div>
       </div>
-      <p class="mt-2 text-xs text-ink-dim" x-text="d.model?.rows ? `Random Forest (200 trees) · ${d.model.rows} rows · chronological hold-out of the last ${d.model.metrics?.validation_days} nights` : ''"></p>
+      <p class="mt-2 text-xs text-ink-dim" x-text="d.model?.rows ? `Random Forest (200 trees) · ${FFA.fmt.n(d.model.rows)} rows · ${d.model.metrics?.method || ''} · R² ${d.model.metrics?.r2 ?? '–'}` : ''"></p>
       <div class="mt-3 h-48"><canvas id="importance" role="img" aria-label="Feature importance of the surplus model"></canvas></div>
     </section>
   </div>

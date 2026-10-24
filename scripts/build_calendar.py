@@ -1,4 +1,4 @@
-"""Generate app/ml/india_calendar.json: public holidays and festivals for Bengaluru, 2026-2031.
+"""Generate app/ml/india_calendar.json: public holidays and festivals for Bengaluru, 2025-2031.
 
 Dates come from the maintained `holidays` package (lunar/Islamic dates are computed; far-future
 Islamic dates carry its "(estimated)" marker because they depend on moon sighting).
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import holidays
 
-FIRST_YEAR, LAST_YEAR = 2026, 2031
+FIRST_YEAR, LAST_YEAR = 2025, 2031
 OUT = Path(__file__).resolve().parent.parent / "app" / "ml" / "india_calendar.json"
 
 # Public holidays that are celebrations (kitchens over-prep); the rest only close offices.

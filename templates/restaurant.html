@@ -55,11 +55,11 @@
           <template x-if="f.inputs?.festival_name"><span class="chip bg-moon/10 text-moon"><i data-lucide="party-popper" class="h-3 w-3"></i><span x-text="f.inputs.festival_name"></span></span></template>
           <template x-if="f.inputs?.holiday_name"><span class="chip bg-violet-500/10 text-violet-700"><i data-lucide="calendar-days" class="h-3 w-3"></i><span x-text="f.inputs.holiday_name"></span></span></template>
         </div>
-        <p class="mt-1.5 text-xs text-ink-dim" x-text="f.weather?.source === 'live' ? 'Weather from the live forecast · holidays and festivals from the 2026–2031 calendar' : 'Beyond the 16-day forecast, so weather is a seasonal estimate · holidays and festivals from the 2026–2031 calendar'"></p>
+        <p class="mt-1.5 text-xs text-ink-dim" x-text="f.weather?.source === 'live' ? 'Weather from the live forecast · holidays and festivals from the 2025–2031 calendar' : 'Beyond the 16-day forecast, so weather is a seasonal estimate · holidays and festivals from the 2025–2031 calendar'"></p>
       </div>
 
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
-        <div><label class="label" for="fdate">Another date</label><input id="fdate" type="date" class="input" x-model="p.date" min="2026-01-01" max="2031-12-31" @change="forecast()"></div>
+        <div><label class="label" for="fdate">Another date</label><input id="fdate" type="date" class="input" x-model="p.date" min="2025-01-01" max="2031-12-31" @change="forecast()"></div>
         <div>
           <label class="label" for="fcat">Dish category</label>
           <select id="fcat" class="input" x-model="p.dish_category" @change="forecast()">

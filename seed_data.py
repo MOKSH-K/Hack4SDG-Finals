@@ -1,4 +1,4 @@
-"""Seed FoodForAll with partners, 90 nights of history and a live 'tonight' scenario.
+"""Seed FoodForAll with partners, a year of nightly history and a live 'tonight' scenario.
 
 Runs automatically on first startup. To wipe and reseed:
     python seed_data.py --reset
@@ -24,7 +24,7 @@ from app.services.common import make_code
 from app.services.forecasting import service_date
 from app.services.safety import compute_expiry
 
-HISTORY_DAYS = 90
+HISTORY_DAYS = 365
 DEFAULT_PASSWORD = "foodforall2026"
 
 DARK_STORES = [

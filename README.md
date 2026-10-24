@@ -28,8 +28,8 @@ python3 -m venv .venv          # or: virtualenv .venv  (if python3-venv isn't in
 Open **http://localhost:8000**. On first start the app automatically:
 
 - creates the SQLite database in `data/`;
-- seeds 7 restaurants, 3 dark stores, 4 NGOs, 23 user accounts, **90 nights of history** and a live "tonight" scenario;
-- trains the surplus model (about 2 s) and saves it to `data/surplus_model.joblib`.
+- seeds 7 restaurants, 3 dark stores, 4 NGOs, 23 user accounts, **a year (365 nights) of history** and a live "tonight" scenario;
+- trains the surplus model (about 15–20 s on first start; later starts load the saved model) and saves it to `data/surplus_model.joblib`.
 
 On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\uvicorn`.
 
@@ -66,7 +66,7 @@ All emails are `@foodforall.in`. The login page's **Quick sign-in** list fills i
    - Early-warning forecast and proximity map.
    - Claim a bundle, then move it through **Picked up → Distributed**.
    - Sign in as `joseph.mathew@…` in a private window and try to claim the same bundle: it's refused.
-6. **`/analytics`** 90-night timeline, day-of-week, weather and festival effects, NGO totals, model card.
+6. **`/analytics`** year-long timeline, day-of-week, weather and festival effects, NGO totals, model card.
 
 **Open 24×7** (on by default, not shown anywhere in the UI) lets people order outside 11 PM–5 AM and limits the automatic cut-off to 03:30–05:00, so daytime walkthroughs aren't emptied. Set `FFA_OPEN_24X7=0` for strict night hours.
 
@@ -98,7 +98,7 @@ FoodForAll/
 │   └── routers/             auth, restaurant (+ /predict-surplus), darkstore, store, ngo, analytics, pages
 ├── templates/               Jinja2 + Tailwind + Alpine.js pages
 ├── static/                  app.js (API client, icons, chart theme), css, vendored libraries
-├── seed_data.py             90-night history + live scenario
+├── seed_data.py             one year of history + live scenario
 └── tests/                   pytest suite (24 tests, including race conditions)
 ```
 
@@ -134,7 +134,15 @@ Interactive API docs: **http://localhost:8000/docs**.
   - 28-night rolling average footfall
   - dish category
 - **Target:** surplus *per 100 diners*, scaled back by footfall at prediction time. This lets one model handle restaurants of any size, including ones smaller than any in the training data.
-- **Validation:** chronological hold-out of the last 14 nights. On the seeded data: **MAE ≈ 5.7 servings vs 10.1** for a per-category-mean baseline, **R² ≈ 0.77**.
+- **Validation:** a rolling backtest over 4 windows of 14 nights each (the last 8 weeks). Each window is predicted by a model trained only on the nights before it. Errors are pooled and reported separately for ordinary and festival nights, because one fortnight is too small and seasonal to judge on. On the seeded data, average error per row (restaurant × dish category × night, about 22 servings of surplus):
+
+  | Predictor | Overall | Ordinary nights | Festival nights |
+  |---|---|---|---|
+  | This model | ≈ 4.5 servings | ≈ 4.4 | ≈ 4.9 |
+  | Per-category average | ≈ 6.5 | | |
+  | Oracle that knows the generating formula | ≈ 4.1 | ≈ 4.2 | ≈ 4.0 |
+
+  R² is about 0.75. Most of the remaining error is the deliberate night-to-night randomness in the seed data (the oracle's 4.1 is the floor), so the model is within about 0.4 servings of the best achievable.
 - **Uncertainty:** the spread across the forest's trees gives an 80% interval. The NGO pre-notification quantity holds back a 10–40% safety buffer based on that spread, so NGOs are never promised food that doesn't arrive.
 - **Explanations:** counterfactual. Each driver is re-predicted with that factor reset to a neutral night (clear, 28 °C, mid-week, no holiday or festival), and the difference is reported as text such as *"Heavy Rain (+45% surplus expected)"*.
 - **Edge cases:**
@@ -154,11 +162,11 @@ Interactive API docs: **http://localhost:8000/docs**.
   | Clear | anything else |
 
 - **Used automatically by:** the restaurant forecast and its 7-night outlook, the NGO early warning, and restaurant closing logs. Kitchen managers never enter weather. The prediction API still accepts optional `weather_condition`/`temperature` overrides for what-if checks.
-- **Seeding:** the 90-night history uses real past weather from Open-Meteo's archive endpoint.
+- **Seeding:** the year of history uses real past weather from Open-Meteo's archive endpoint.
 - **Fallback:** if the API is unreachable, the app uses cached data, then a seasonal estimate. Set `FFA_WEATHER_PROVIDER=offline` to never call the network (the tests do this).
 
-### Holiday and festival calendar (2026–2031)
-- **Data file:** `app/ml/india_calendar.json` holds public holidays (national plus Karnataka) and festivals for 2026–2031. The forecaster uses both automatically.
+### Holiday and festival calendar (2025–2031)
+- **Data file:** `app/ml/india_calendar.json` holds public holidays (national plus Karnataka) and festivals for 2025–2031. The forecaster uses both automatically.
 - **Generation:** it's built by `scripts/build_calendar.py` from the maintained [`holidays`](https://pypi.org/project/holidays/) package, which computes lunar and Islamic dates, plus a few fixed dates (Kannada Rajyotsava, Halloween, New Year's Eve, Valentine's Day). Navratri is derived as the nine nights before Dussehra.
 - **Uncertain dates:** far-future Islamic dates are marked "(estimated)" because they depend on moon sighting.
 - **Extending:** to cover more years, edit `LAST_YEAR` and run `.venv/bin/python scripts/build_calendar.py` (needs `requirements-dev.txt`).
