@@ -1,0 +1,14 @@
+{
+  "name": "FoodForAll",
+  "short_name": "FoodForAll",
+  "description": "Late-night meals for night-shift workers, and every unsold meal shared with shelters.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ee",
+  "theme_color": "#355e3b",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

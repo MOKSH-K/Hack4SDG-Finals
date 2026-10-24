@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- FoodForAll: a warm bowl under a late-night crescent moon -->
+  <rect width="64" height="64" rx="14" fill="#355e3b"/>
+  <!-- crescent moon -->
+  <circle cx="45" cy="17" r="9" fill="#e9b949"/>
+  <circle cx="49.5" cy="13.5" r="7.6" fill="#355e3b"/>
+  <!-- steam -->
+  <path d="M24 26c-3-3 3-5 0-9M33 26c-3-3 3-5 0-9" fill="none" stroke="#f7f5ee" stroke-width="3" stroke-linecap="round" opacity=".85"/>
+  <!-- bowl -->
+  <path d="M10 32h44c0 10.5-9.8 18-22 18S10 42.5 10 32z" fill="#f7f5ee"/>
+  <rect x="24" y="49" width="16" height="4" rx="2" fill="#f7f5ee"/>
+  <!-- rim -->
+  <rect x="8" y="30" width="48" height="4" rx="2" fill="#f7f5ee"/>
+</svg>

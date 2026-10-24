@@ -117,7 +117,9 @@ def test_concurrent_ngo_claims_have_one_winner():
 
 # ---------- routing & food safety ----------
 
-def test_sweep_routes_near_expiry_and_expires_stale():
+def test_sweep_routes_near_expiry_and_expires_stale(monkeypatch):
+    # Outside the 03:30-05:00 cut-off window, so only the expiry rule applies whatever time the tests run.
+    monkeypatch.setattr("app.services.routing.past_ngo_cutoff", lambda at: False)
     near = make_batch(qty=8, hours_left=1.0)   # inside the 2 h relief window
     fresh = make_batch(qty=8, hours_left=5.0)
     with SessionLocal() as db:
@@ -348,3 +350,12 @@ def test_operations_lead_can_open_restaurant_hub(client):
     r = client.post("/api/v1/auth/login", json={"email": "nikhil.menon@foodforall.in", "password": "foodforall2026"})
     h = {"Authorization": f"Bearer {r.json()['token']}"}
     assert client.get("/api/v1/restaurant/overview", headers=h).status_code == 200
+
+
+def test_favicons_are_served(client):
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/x-icon" and r.content[:4] == b"\x00\x00\x01\x00"
+    assert client.get("/apple-touch-icon.png").headers["content-type"] == "image/png"
+    assert client.get("/static/icons/favicon.svg").status_code == 200
+    page = client.get("/").text
+    assert 'href="/favicon.ico"' in page and 'rel="manifest"' in page

@@ -1,6 +1,6 @@
 # FoodForAll: project context
 
-Handover notes for continuing development (for people and AI agents). Last updated 2026-10-25. The latest pushed commit is `83152dd`; the local commit that removes `vercel.json` and updates the docs is waiting for the user to push (see §0).
+Handover notes for continuing development (for people and AI agents). Last updated 2026-10-25. Pushed and live: `0254e12` (Vercel 404 fix). The favicon commit is local, waiting for the user to push (see §0).
 The README is the user-facing guide; this file covers state, decisions and next steps.
 
 ---
@@ -11,7 +11,7 @@ The README is the user-facing guide; this file covers state, decisions and next 
 |---|---|
 | **Project folder (the only correct one)** | `/home/rohan/Desktop/FFA/FoodForAll` |
 | Git remote | `https://github.com/Ron102008/FoodForAll.git`, branch `main` |
-| Git state | `origin/main` = `83152dd`. Local `main` has 1 newer commit ("Fix Vercel 404s: remove vercel.json rewrite; update docs": deletes `vercel.json`, updates README, adds this file). **The user must push it**; pushing triggers a Vercel production deploy. |
+| Git state | `origin/main` = `0254e12` ("Fix Vercel 404s…", deployed and verified live). Local `main` has 1 newer commit, "Add FoodForAll favicon set" (icons, root icon routes, time-of-day test fix). **The user must push it**; pushing triggers a Vercel production deploy. |
 | **Wrong folder: do not use** | `/home/rohan/Desktop/FoodForAll`, a clone of a *different* repo (`Hussain13620/FoodForAll`) where the app was first built by mistake. It holds a stale copy and a `.vercel/` link to the *old* Vercel project `foodforall`. The user may delete it. |
 | **Live site** | https://food-for-all-self.vercel.app (Vercel project `food-for-all`, auto-deploys from GitHub `main`); see §6 |
 | Local server | `.venv/bin/uvicorn app.main:app --port 8000`, at http://localhost:8000 |
@@ -89,7 +89,11 @@ static/js/app.js     FFA helpers: api() with friendly errors, auth/guard, toast,
 seed_data.py         7 restaurants, 3 dark stores, 4 NGOs, 23 users, 365 nights of history (real archive weather),
                      a live "tonight" scenario, per-hub activity log. `python seed_data.py --reset` wipes and reseeds
 scripts/build_calendar.py  regenerates the 2025-2031 holiday/festival calendar from the `holidays` package
-tests/               33 pytest tests (conftest sets FFA_WEATHER_PROVIDER=offline, isolated temp DB)
+scripts/build_icons.py     renders static/icons/* (favicon.ico 16/32/48, favicon-32, apple-touch 180 full-bleed, icon-192/512)
+                           from static/icons/favicon.svg via headless Chrome; site.webmanifest is hand-written
+static/icons/        favicon set + web manifest. /favicon.ico and /apple-touch-icon(-precomposed).png are also served
+                     at the site root by routers/pages.py (browsers and iOS request them there)
+tests/               34 pytest tests (conftest sets FFA_WEATHER_PROVIDER=offline, isolated temp DB)
 .vercelignore, .python-version (3.12)   Vercel config. There is deliberately NO vercel.json (see §6)
 PROJECT_CONTEXT.md   this file
 ```
@@ -150,7 +154,7 @@ PROJECT_CONTEXT.md   this file
    - Release returns a claim to the pool. Concurrent claims have exactly one winner (tested).
 7. **Analytics.** Impact KPIs and SDG indices, a year timeline, weekday/weather/temperature/festival effects, NGO totals, and a plain accuracy summary with "What affects leftovers most".
 8. **Auth.** JWT bearer tokens in localStorage, with role guards on both pages and APIs. Self sign-up is for night workers only.
-9. **UX.** Light olive theme, responsive (checked at 390 px), plain language everywhere, friendly validation errors (`FIELD_LABELS` in `main.py`), role-aware nav, and Open-Meteo attribution in the footer (required by their licence).
+9. **UX.** A relevant favicon (a cream bowl with steam under an amber crescent moon on forest green) with the full icon set and web manifest ("Add to home screen"). Light olive theme, responsive (checked at 390 px), plain language everywhere, friendly validation errors (`FIELD_LABELS` in `main.py`), role-aware nav, and Open-Meteo attribution in the footer (required by their licence).
 
 ---
 
@@ -211,11 +215,11 @@ PROJECT_CONTEXT.md   this file
 | Environment variables | `FFA_JWT_SECRET` (Secret, Production), set by the agent on 2026-10-25. It takes effect from the next deploy. |
 | Config files | `.python-version` (3.12) and `.vercelignore` (excludes `.venv`, `data`, `tests`, `requirements-dev.txt`, `.env*`, `.vercel`). **No `vercel.json`.** |
 
-**The 404 bug, and its fix (fixed in code, not yet deployed):**
+**The 404 bug, and its fix (fixed and verified live on 2026-10-25):**
 - **Symptom:** the deployment of `83152dd` returns FastAPI's `{"detail":"Not Found"}` on every path. The app itself boots (the first request took about 41 s for seeding and training).
 - **Cause:** the build log says *"Internal rewrites in backend framework projects now route requests using the rewritten destination path."* Our old `vercel.json` rewrote `/(.*)` → `/api/index`, so FastAPI received `/api/index` for every request, and no route matches that.
-- **Fix:** `vercel.json` is deleted in the local commit. The FastAPI preset already routes every path to the app, and the old `functions` block (maxDuration, includeFiles) doesn't apply to the preset. The cold start of about 41 s completes within the default limit.
-- **After the user pushes:** confirm that `/`, `/login`, `/store`, `/restaurant`, `/darkstore`, `/ngo`, `/analytics`, `/static/js/app.js` and `/api/v1/store/menu` return 200. Confirm that source files (`/README.md`, `/app/config.py`, `/PROJECT_CONTEXT.md`, `/.env.local`) still return 404. Sign in as a seeded account and open each role's page. If anything still 404s, the entrypoint Vercel picked may differ: it may use `api/index.py` (which imports `app.main:app`) or another candidate. Check with `vercel inspect <deployment-url> --logs --scope food-wise`.
+- **Fix:** `vercel.json` was deleted in `0254e12`. After the user pushed it, `/`, `/store` and `/api/v1/store/menu` returned 200 on the live site. The FastAPI preset already routes every path to the app, and the old `functions` block (maxDuration, includeFiles) doesn't apply to the preset. The cold start of about 41 s completes within the default limit.
+- **After each push:** confirm that `/favicon.ico` and `/`, `/login`, `/store`, `/restaurant`, `/darkstore`, `/ngo`, `/analytics`, `/static/js/app.js` and `/api/v1/store/menu` return 200. Confirm that source files (`/README.md`, `/app/config.py`, `/PROJECT_CONTEXT.md`, `/.env.local`) still return 404. Sign in as a seeded account and open each role's page. If anything still 404s, the entrypoint Vercel picked may differ: it may use `api/index.py` (which imports `app.main:app`) or another candidate. Check with `vercel inspect <deployment-url> --logs --scope food-wise`.
 
 **The old project:** `foodforall` (https://foodforall-ten.vercel.app, also `foodforall-food-wise.vercel.app`) was created by the agent with CLI deploys, is linked only from the wrong folder, still runs very old code and 404s. Suggest the user deletes it (`vercel project rm foodforall --scope food-wise`), **only with their confirmation**.
 
@@ -242,12 +246,14 @@ PROJECT_CONTEXT.md   this file
 cd /home/rohan/Desktop/FFA/FoodForAll
 virtualenv .venv && .venv/bin/pip install -r requirements-dev.txt   # dev = runtime + uvicorn[standard], pytest, httpx, holidays
 .venv/bin/uvicorn app.main:app --reload                            # http://localhost:8000
-.venv/bin/python -m pytest -q                                      # 33 tests, about 25 s
+.venv/bin/python -m pytest -q                                      # 34 tests, about 25 s
 .venv/bin/python seed_data.py --reset                              # wipe + reseed (or: rm -rf data/)
 .venv/bin/python scripts/build_calendar.py                         # regenerate the calendar
+.venv/bin/python scripts/build_icons.py                            # regenerate icons after editing static/icons/favicon.svg
 ```
 
 - **Schema changes:** delete `data/`, because `create_all` doesn't migrate (there's no Alembic).
+- **Time-dependent tests:** between 03:30 and 05:00 the real cut-off rule sends all stock to NGOs. Tests that check expiry-only routing must monkeypatch `app.services.routing.past_ngo_cutoff` (see `test_sweep_routes_near_expiry_and_expires_stale`).
 - **`requirements.txt`** is runtime only (what Vercel installs). **`requirements-dev.txt`** adds the test and calendar tools.
 
 **Environment variables** (all optional):
@@ -277,7 +283,7 @@ virtualenv .venv && .venv/bin/pip install -r requirements-dev.txt   # dev = runt
 
 ## 8. Pending tasks
 
-1. **Push and verify the deploy.** The user pushes the local commit; then verify the live site as listed in §6. If it works, tell the user, and mention the cold-start and persistence caveats.
+1. **Push the favicon commit and verify the deploy.** The user pushes; then check that `/favicon.ico` returns 200 on the live site and re-run the §6 checks. The 404 fix is already live.
 2. **Decide on persistence and cold start** for the live site, with the user: hosted Postgres, a pre-trained model, or skipping the backtest when serverless.
 3. **Clean-up (ask first):** delete the old Vercel project `foodforall`; delete the wrong folder `/home/rohan/Desktop/FoodForAll`; remove the stray root `__pycache__/` (it's ignored).
 4. **Optional Gemini integration** (the user has a free Google AI Studio key): plain-English nightly briefings for NGOs or kitchen managers. Read the key from an env var such as `GEMINI_API_KEY` (set it in Vercel too), never commit it, and keep model and jargon wording out of the UI.
@@ -293,7 +299,7 @@ Done recently: the README walkthrough and architecture are updated to the curren
 ```bash
 cd /home/rohan/Desktop/FFA/FoodForAll
 git status -sb && git log --oneline -3                      # expect main in sync with origin once the user has pushed
-.venv/bin/python -m pytest -q -p no:cacheprovider           # expect 33 passed
+.venv/bin/python -m pytest -q -p no:cacheprovider           # expect 34 passed
 .venv/bin/uvicorn app.main:app --port 8000 &                # first boot: weather refresh + training, about 20 s
 curl -s localhost:8000/api/v1/ml/model-info | head -c 300   # expect rows 12775 and backtest metrics
 ~/.local/node/bin/vercel whoami                             # Vercel login status

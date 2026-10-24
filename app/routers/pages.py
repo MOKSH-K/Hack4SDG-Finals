@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import BASE_DIR
@@ -28,3 +28,22 @@ def _make_page(template: str, title: str, roles: tuple[str, ...]):
 
 for path, (template, title, roles) in PAGES.items():
     router.add_api_route(path, _make_page(template, title, roles), methods=["GET"], response_class=HTMLResponse)
+
+
+# Browsers and iOS look for these at the site root regardless of <link> tags.
+ICONS = BASE_DIR / "static" / "icons"
+ROOT_FILES = {
+    "/favicon.ico": ("favicon.ico", "image/x-icon"),
+    "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
+    "/apple-touch-icon-precomposed.png": ("apple-touch-icon.png", "image/png"),
+}
+
+
+def _make_file(name: str, media_type: str):
+    def file():
+        return FileResponse(ICONS / name, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
+    return file
+
+
+for path, (name, media_type) in ROOT_FILES.items():
+    router.add_api_route(path, _make_file(name, media_type), methods=["GET"])

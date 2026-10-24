@@ -103,11 +103,12 @@ FoodForAll/
 │   └── routers/             auth, restaurant (+ /predict-surplus, /weather, /restaurant/outlook), darkstore, store, ngo, analytics, pages
 ├── api/index.py             serverless entry point (exposes app.main:app)
 ├── scripts/build_calendar.py  regenerates the 2025–2031 holiday/festival calendar
+├── scripts/build_icons.py   renders the favicon set from static/icons/favicon.svg (headless Chrome)
 ├── templates/               Jinja2 + Tailwind + Alpine.js pages
-├── static/                  app.js (API client, plain-language labels, role-aware menu, icons, chart theme), css, vendored libraries
+├── static/                  app.js (API client, plain-language labels, role-aware menu, icons, chart theme), css, icons/ (favicon set + web manifest), vendored libraries
 ├── seed_data.py             one year of history + live scenario
 ├── PROJECT_CONTEXT.md       handover notes: state, decisions, pending work
-└── tests/                   pytest suite (33 tests, including race conditions)
+└── tests/                   pytest suite (34 tests, including race conditions)
 ```
 
 **Stack:**
