@@ -32,12 +32,13 @@ def run_sweep(db: Session, *, force_cutoff: bool = False, telemetry: bool = True
     lead = timedelta(hours=RELIEF_LEAD_HOURS)
     for b in db.scalars(select(SurplusBatch).where(SurplusBatch.status.in_(["AVAILABLE", "INCOMING"]))).all():
         if b.expires_at <= t:
-            b.status_note = "Expired before it could be sold or routed"
+            b.status_note = "Safe time ran out before it could be sold or donated"
             b.status, b.available_qty = "EXPIRED", 0
             counts["expired_batches"] += 1
-            audit(db, "expire", f"{b.code} expired ({b.dish_name})")
+            audit(db, "expire", f"{b.dish_name}: safe time ran out", b.dark_store_id)
         elif b.status == "AVAILABLE" and (cutoff or b.expires_at - lead <= t):
-            reason = "3:30 AM NGO cut-off" if cutoff else f"Within {RELIEF_LEAD_HOURS:g} h of safety expiry"
+            reason = ("Given to NGOs at the 3:30 AM cut-off" if cutoff
+                      else "Given to NGOs before its safe time runs out")
             if convert_to_relief(db, b, reason):
                 counts["to_relief"] += 1
 
@@ -45,7 +46,7 @@ def run_sweep(db: Session, *, force_cutoff: bool = False, telemetry: bool = True
         if bundle.batch.expires_at <= t:
             bundle.status = "EXPIRED"
             counts["expired_bundles"] += 1
-            audit(db, "expire", f"{bundle.code} relief bundle expired unclaimed/uncollected")
+            audit(db, "expire", f"{bundle.servings} × {bundle.batch.dish_name} wasn't collected in time", bundle.dark_store_id)
 
     # Latest stage first, so an order that is long overdue jumps straight to where it belongs.
     for stage, minutes in reversed(ORDER_PROGRESS):

@@ -4,7 +4,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.database import now
-from app.models import ReliefBundle, SurplusBatch
+from app.models import NGO, ReliefBundle, SurplusBatch
 from app.services.common import audit, lock_for_write, make_code
 
 STAGES = ["FLAGGED", "CLAIMED", "IN_TRANSIT", "DISTRIBUTED"]
@@ -31,7 +31,7 @@ def convert_to_relief(db: Session, batch: SurplusBatch, reason: str) -> ReliefBu
     bundle = ReliefBundle(code=make_code("REL"), batch_id=batch.id, dark_store_id=batch.dark_store_id,
                           servings=qty, reason=reason, status="FLAGGED", flagged_at=now())
     db.add(bundle)
-    audit(db, "relief", f"{batch.code}: {qty} servings of {batch.dish_name} -> relief bundle ({reason})")
+    audit(db, "relief", f"Offered {qty} × {batch.dish_name} free to NGOs", batch.dark_store_id)
     return bundle
 
 
@@ -46,10 +46,10 @@ def _transition(db: Session, bundle_id: int, ngo_id: int, from_status: str, valu
         db.rollback()
         bundle = db.get(ReliefBundle, bundle_id)
         if bundle is None:
-            raise HTTPException(404, "Relief bundle not found")
+            raise HTTPException(404, "We couldn't find that donation.")
         if from_status == "FLAGGED" and bundle.status != "FLAGGED":
-            raise HTTPException(409, "Another NGO has already claimed this bundle")
-        raise HTTPException(409, f"Bundle is {bundle.status}; expected {from_status} for your NGO")
+            raise HTTPException(409, "Another NGO has already claimed this food.")
+        raise HTTPException(409, "This donation has already moved on. Refresh to see its latest status.")
     db.commit()
     bundle = db.get(ReliefBundle, bundle_id)
     db.refresh(bundle)
@@ -61,16 +61,16 @@ def claim(db: Session, bundle_id: int, ngo_id: int) -> ReliefBundle:
     # Refuse claims on food that has expired but hasn't been swept yet.
     bundle = db.get(ReliefBundle, bundle_id)
     if bundle and bundle.batch.expires_at <= t:
-        raise HTTPException(409, "This bundle has passed its safety expiry")
+        raise HTTPException(409, "This food is past its safe time and can no longer be collected.")
     b = _transition(db, bundle_id, ngo_id, "FLAGGED", {"status": "CLAIMED", "ngo_id": ngo_id, "claimed_at": t})
-    audit(db, "claim", f"{b.code} claimed by NGO #{ngo_id}")
+    audit(db, "claim", f"{b.ngo.name} claimed {b.servings} × {b.batch.dish_name}", b.dark_store_id)
     db.commit()
     return b
 
 
 def pick_up(db: Session, bundle_id: int, ngo_id: int) -> ReliefBundle:
     b = _transition(db, bundle_id, ngo_id, "CLAIMED", {"status": "IN_TRANSIT", "picked_up_at": now()})
-    audit(db, "pickup", f"{b.code} picked up by NGO #{ngo_id}")
+    audit(db, "pickup", f"{b.ngo.name} picked up {b.servings} × {b.batch.dish_name}", b.dark_store_id)
     db.commit()
     return b
 
@@ -78,14 +78,16 @@ def pick_up(db: Session, bundle_id: int, ngo_id: int) -> ReliefBundle:
 def distribute(db: Session, bundle_id: int, ngo_id: int, shelter_name: str, people_fed: int) -> ReliefBundle:
     b = _transition(db, bundle_id, ngo_id, "IN_TRANSIT", {
         "status": "DISTRIBUTED", "distributed_at": now(), "shelter_name": shelter_name, "people_fed": people_fed})
-    audit(db, "distribute", f"{b.code}: {people_fed} people fed at {shelter_name}")
+    audit(db, "distribute", f"{b.ngo.name} fed {people_fed} people at {shelter_name}", b.dark_store_id)
     db.commit()
     return b
 
 
 def release(db: Session, bundle_id: int, ngo_id: int) -> ReliefBundle:
     """An NGO that can't make it releases its claim back to the pool."""
+    ngo = db.get(NGO, ngo_id)
     b = _transition(db, bundle_id, ngo_id, "CLAIMED", {"status": "FLAGGED", "ngo_id": None, "claimed_at": None})
-    audit(db, "release", f"{b.code} released by NGO #{ngo_id}")
+    audit(db, "release", f"{ngo.name} can't collect {b.servings} × {b.batch.dish_name}; offered to other NGOs again",
+          b.dark_store_id)
     db.commit()
     return b

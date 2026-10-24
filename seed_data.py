@@ -261,6 +261,8 @@ def _seed_tonight(db, rng, restaurants, stores, ngos, workers, t) -> None:
         (0, 2, 95, "FLAGGED", None), (3, 1, 80, "FLAGGED", None), (2, 1, 105, "FLAGGED", None),
         (3, 2, 70, "CLAIMED", 0), (1, 0, 300, "IN_TRANSIT", 0), (0, 1, 60, "DISTRIBUTED", 1),
     ]
+    reason = "Given to NGOs before its safe time runs out"
+    log: list[tuple] = []   # (time, dark store, message) for the hub activity logs
     for ri, di, mins, stage, ngo_i in relief_specs:
         r, dish = restaurants[ri], RESTAURANTS[ri][2][di]
         storage = dish[4]
@@ -269,33 +271,40 @@ def _seed_tonight(db, rng, restaurants, stores, ngos, workers, t) -> None:
         sold = rng.randint(4, 10)
         servings = b.initial_qty - sold
         b.sold_qty, b.available_qty, b.status = sold, 0, "RELIEF"
-        b.status_note = "Within 2 h of safety expiry"
+        b.status_note = reason
         db.add(b)
         db.flush()
-        flagged = t - timedelta(minutes=rng.randint(15, 40))
+        # Far enough back that every later stage (up to +30 min) has already happened.
+        flagged = t - timedelta(minutes=rng.randint(35, 60))
         bundle = ReliefBundle(code=make_code("REL"), batch_id=b.id, dark_store_id=b.dark_store_id, servings=servings,
-                              reason="Within 2 h of safety expiry", status=stage, flagged_at=flagged)
+                              reason=reason, status=stage, flagged_at=flagged)
+        what = f"{servings} × {dish[0]}"
+        log.append((flagged, b.dark_store_id, f"Offered {what} free to NGOs"))
         if ngo_i is not None:
             bundle.ngo_id = ngos[ngo_i].id
             bundle.claimed_at = flagged + timedelta(minutes=4)
+            log.append((bundle.claimed_at, b.dark_store_id, f"{ngos[ngo_i].name} claimed {what}"))
         if stage in ("IN_TRANSIT", "DISTRIBUTED"):
             bundle.picked_up_at = flagged + timedelta(minutes=12)
+            log.append((bundle.picked_up_at, b.dark_store_id, f"{ngos[ngo_i].name} picked up {what}"))
         if stage == "DISTRIBUTED":
             bundle.distributed_at = flagged + timedelta(minutes=30)
             bundle.shelter_name = "Ejipura Night Shelter"
             bundle.people_fed = servings - 2
+            log.append((bundle.distributed_at, b.dark_store_id,
+                        f"{ngos[ngo_i].name} fed {bundle.people_fed} people at {bundle.shelter_name}"))
         db.add(bundle)
 
-    # Opening entries for the hub activity log.
-    for minutes, kind, msg in [
-        (95, "dispatch", "Restaurants began dispatching tonight's surplus to both hubs"),
-        (70, "receive", f"{len(available)} batches checked in at verified hot-hold / chill temperatures"),
-        (40, "relief", "Batches within 2 h of safety expiry converted to free relief bundles"),
-        (35, "receive", "HSR Layout Night Hub checked in Saffron Courtyard and Udupi Night Café dispatches"),
-        (30, "claim", "Annapoorna Night Relief claimed 2 relief bundles"),
-        (8, "distribute", "Shelter Bridge Trust distributed a bundle at Ejipura Night Shelter"),
-    ]:
-        db.add(AuditEvent(kind=kind, message=msg, created_at=t - timedelta(minutes=minutes)))
+    # Each hub's activity log: tonight's deliveries and check-ins, then the donation events above.
+    for r in restaurants:
+        mine = [b for b in available if b.restaurant_id == r.id]
+        if mine:
+            sent = min(b.dispatched_at for b in mine)
+            log.append((sent, r.dark_store_id, f"{r.name} sent {sum(b.initial_qty for b in mine)} servings"))
+            log.append((max(b.received_at for b in mine), r.dark_store_id,
+                        f"Checked in {r.name}'s delivery at safe temperatures"))
+    for at, store_id, msg in log:
+        db.add(AuditEvent(kind="seed", message=msg, dark_store_id=store_id, created_at=at))
 
     # Last 30 minutes of sensor telemetry.
     for s in stores:

@@ -21,20 +21,22 @@ router = APIRouter(prefix="/api/v1", tags=["restaurant"])
 
 
 def _my_restaurant(db: Session, user: User) -> Restaurant:
-    if user.restaurant_id is None:
-        raise HTTPException(400, "This account is not linked to a partner restaurant")
-    return db.get(Restaurant, user.restaurant_id)
+    # The operations lead can open every portal; show them the first partner restaurant.
+    rid = user.restaurant_id or (db.scalar(select(Restaurant.id).order_by(Restaurant.id)) if user.role == "admin" else None)
+    if rid is None:
+        raise HTTPException(400, "Your account isn't linked to a restaurant yet. Please contact the FoodForAll team.")
+    return db.get(Restaurant, rid)
 
 
 @router.post("/predict-surplus")
 def predict_surplus(body: PredictIn, db: Session = Depends(get_db)):
     if not forecaster.ready:
-        raise HTTPException(503, "Model is still training - try again in a few seconds")
+        raise HTTPException(503, "Forecasts are still loading. Please try again in a few seconds.")
     footfall = body.historical_avg_footfall
     if footfall is None:
         r = db.get(Restaurant, body.restaurant_id) if body.restaurant_id else None
         if body.restaurant_id and r is None:
-            raise HTTPException(404, "Restaurant not found")
+            raise HTTPException(404, "We couldn't find that restaurant.")
         footfall = rolling_footfall(db, r, body.date) if r else 300
     holiday = holiday_name(body.date)
     festival = festival_name(body.date)
@@ -73,7 +75,7 @@ def outlook(days: int = Query(default=7, ge=1, le=16), db: Session = Depends(get
             user: User = Depends(require_roles("restaurant"))):
     """The next `days` nights: automatic weather + calendar, and the predicted surplus for each."""
     if not forecaster.ready:
-        raise HTTPException(503, "Model is still training - try again in a few seconds")
+        raise HTTPException(503, "Forecasts are still loading. Please try again in a few seconds.")
     r = _my_restaurant(db, user)
     start = service_date(now())
     footfall = rolling_footfall(db, r, start)
@@ -157,9 +159,9 @@ def daily_log(body: DailyLogIn, db: Session = Depends(get_db), user: User = Depe
     db.commit()
     return {
         "service_date": d.isoformat(), "total_surplus": total_surplus, "zero_surplus": total_surplus == 0,
-        "message": ("Zero surplus tonight - nothing to dispatch. Logged for model training."
+        "message": ("Saved. Nothing left over tonight, so there's nothing to send."
                     if total_surplus == 0 else
-                    f"{total_surplus} surplus servings logged. Dispatch them to a dark store below."),
+                    f"Saved. {total_surplus} servings left over: send them to a hub below."),
     }
 
 
@@ -168,7 +170,7 @@ def dispatch(body: DispatchIn, db: Session = Depends(get_db), user: User = Depen
     r = _my_restaurant(db, user)
     store_id = body.dark_store_id or r.dark_store_id
     if store_id is None or db.get(DarkStore, store_id) is None:
-        raise HTTPException(422, "Choose a valid dark store")
+        raise HTTPException(422, "Choose a hub to send the food to.")
     allergens = ",".join(sorted({a.strip().title() for a in body.allergens if a.strip()}))
     batch = dispatch_batch(db, restaurant_id=r.id, dark_store_id=store_id, dish_name=body.dish_name.strip(),
                            category=body.dish_category, diet=body.diet, allergens=allergens, storage=body.storage,

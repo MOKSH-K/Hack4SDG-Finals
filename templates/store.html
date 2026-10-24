@@ -7,15 +7,15 @@
     <span class="grid h-9 w-9 place-items-center rounded-lg bg-night-900/50 text-moon"><i data-lucide="moon" class="h-5 w-5"></i></span>
     <div>
       <div class="font-semibold">
-        Late-night kitchen · <span x-text="`${hours.open} – ${hours.close}`"></span>
+        Late-night kitchen · <span x-text="`${FFA.fmt.clock12(hours.open)} – ${FFA.fmt.clock12(hours.close)}`"></span>
         <span class="chip ml-2" :class="menu.open ? 'bg-rescue/15 text-rescue' : 'bg-alert/15 text-alert'" x-text="menu.open ? 'Open now' : 'Closed'"></span>
       </div>
       <div class="text-sm text-ink-muted">
-        Fresh surplus from top restaurants, held at safe temperatures. Unsold food goes to shelters at <span x-text="hours.ngo_cutoff"></span>.
+        Fresh food from top restaurants, kept at safe temperatures. Anything unsold goes to shelters by <span x-text="FFA.fmt.clock12(hours.ngo_cutoff)"></span>.
       </div>
     </div>
     <div class="ml-auto flex items-center gap-2">
-      <label for="store" class="sr-only">Dark store</label>
+      <label for="store" class="sr-only">Deliver from</label>
       <select id="store" class="input w-auto" x-model.number="storeId" @change="cart = []; load()">
         <template x-for="s in menu.stores" :key="s.id"><option :value="s.id" x-text="`${s.name} (${s.area})`" :selected="s.id === storeId"></option></template>
       </select>
@@ -42,7 +42,7 @@
         <template x-for="item in visible()" :key="item.id">
           <article class="card flex flex-col p-4" :class="item.status !== 'AVAILABLE' && 'opacity-60'">
             <div class="flex items-start gap-2">
-              <span class="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-sm border-2" :class="dietTone(item.diet).border" :title="FFA.fmt.label(item.diet)">
+              <span class="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-sm border-2" :class="dietTone(item.diet).border" :title="FFA.words.diet[item.diet]">
                 <span class="h-1.5 w-1.5 rounded-full" :class="dietTone(item.diet).dot"></span>
               </span>
               <div class="min-w-0">
@@ -59,10 +59,10 @@
               <span class="chip bg-night-700 text-ink-muted">
                 <template x-if="item.storage === 'HOT'"><i data-lucide="flame" class="h-3 w-3 text-orange-600"></i></template>
                 <template x-if="item.storage !== 'HOT'"><i data-lucide="snowflake" class="h-3 w-3 text-sky2"></i></template>
-                <span x-text="item.storage === 'HOT' ? 'Hot-held' : 'Chilled'"></span>
+                <span x-text="item.storage === 'HOT' ? 'Served hot' : 'Chilled'"></span>
               </span>
               <template x-if="item.haccp.verified">
-                <span class="chip bg-rescue/10 text-rescue" :title="item.haccp.tag"><i data-lucide="shield-check" class="h-3 w-3"></i>HACCP verified</span>
+                <span class="chip bg-rescue/10 text-rescue" title="Checked for safe temperature and freshness"><i data-lucide="shield-check" class="h-3 w-3"></i>Safety checked</span>
               </template>
             </div>
 
@@ -74,8 +74,8 @@
               <div class="mb-3 flex items-center justify-between text-xs">
                 <span :class="item.available_qty <= 3 ? 'font-semibold text-alert' : 'text-ink-muted'"
                       x-text="item.status !== 'AVAILABLE' ? 'Sold out' : (item.available_qty <= 3 ? `Only ${item.available_qty} left!` : `${item.available_qty} portions left`)"></span>
-                <span class="flex items-center gap-1 tabular-nums" :class="secsToRelief(item) < 1800 ? 'text-moon' : 'text-ink-muted'" title="Time left on sale before this dish is routed to NGOs">
-                  <i data-lucide="timer" class="h-3.5 w-3.5"></i><span x-text="'On sale ' + FFA.fmt.dur(secsToRelief(item))"></span>
+                <span class="flex items-center gap-1 tabular-nums" x-show="secsToRelief(item) < 3 * 3600" :class="secsToRelief(item) < 1800 ? 'text-moon' : 'text-ink-muted'" title="After this, any unsold portions are donated to shelters">
+                  <i data-lucide="timer" class="h-3.5 w-3.5"></i><span x-text="'Available for ' + FFA.fmt.dur(secsToRelief(item))"></span>
                 </span>
               </div>
               <template x-if="item.status === 'AVAILABLE'">
@@ -122,7 +122,7 @@
             <button class="btn-primary w-full" @click="checkout()" :disabled="busy || !menu.open">
               <span x-text="busy ? 'Reserving your food…' : (signedInWorker() ? 'Place order' : 'Sign in to order')"></span>
             </button>
-            <p class="text-xs text-ink-dim">Stock is locked the moment you check out, so nobody else can buy your portion.</p>
+            <p class="text-xs text-ink-dim">We hold your portions for you as soon as you place the order.</p>
           </div>
         </template>
       </div>

@@ -114,11 +114,40 @@ async def ready_and_swept(request: Request, call_next):
     return await call_next(request)
 
 
+# Form-field names as people see them on screen, for validation messages.
+FIELD_LABELS = {
+    "delivery_address": "Delivery address", "email": "Email", "password": "Password", "name": "Name",
+    "dish_name": "Dish name", "quantity": "Servings", "shelf_life_hours": "Shelf life", "price": "Price",
+    "cooked_at": "Cooked at", "entry_temp_c": "Temperature", "reason": "Reason", "shelter_name": "Shelter name",
+    "people_fed": "People fed", "closing_time": "Closing time", "actual_footfall": "Diners tonight",
+    "prep_count": "Prepared", "sold_count": "Sold", "expires_at": "Safe-until time", "qty": "Quantity",
+    "items": "Cart", "date": "Date", "allergens": "Allergens",
+}
+
+
+def _friendly(e: dict) -> str:
+    field = next((str(p) for p in reversed(e["loc"]) if isinstance(p, str) and p not in ("body", "query", "path")), "")
+    label = FIELD_LABELS.get(field, "This field")
+    kind, ctx = e.get("type", ""), e.get("ctx") or {}
+    if kind == "value_error":
+        return str(ctx.get("error") or e["msg"]).removeprefix("Value error, ")
+    if kind == "missing":
+        return f"{label} is required"
+    if kind == "string_too_short":
+        return f"{label} is too short"
+    if kind == "string_too_long":
+        return f"{label} is too long"
+    if kind in ("greater_than_equal", "greater_than"):
+        return f"{label} must be at least {ctx.get('ge', ctx.get('gt'))}"
+    if kind in ("less_than_equal", "less_than"):
+        return f"{label} can be at most {ctx.get('le', ctx.get('lt'))}"
+    if kind == "too_short" and field == "items":
+        return "Your cart is empty"
+    return f"{label} doesn't look right"
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error(_: Request, exc: RequestValidationError):
-    """Flatten Pydantic errors into one readable sentence for the UI toasts."""
-    msgs = []
-    for e in exc.errors():
-        field = ".".join(str(p) for p in e["loc"] if p not in ("body", "query", "path"))
-        msgs.append(f"{field}: {e['msg']}" if field else e["msg"])
-    return JSONResponse(status_code=422, content={"detail": "; ".join(msgs)})
+    """Turn validation errors into one plain sentence for the on-screen messages (no field paths or codes)."""
+    msgs = list(dict.fromkeys(_friendly(e) for e in exc.errors()))
+    return JSONResponse(status_code=422, content={"detail": ". ".join(msgs) + "."})

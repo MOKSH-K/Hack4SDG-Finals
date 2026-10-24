@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/ngo", tags=["ngo"])
 def _ngo(db: Session, user: User) -> NGO:
     ngo_id = user.ngo_id or (db.scalar(select(NGO.id).order_by(NGO.id)) if user.role == "admin" else None)
     if ngo_id is None:
-        raise HTTPException(400, "This account is not linked to an NGO")
+        raise HTTPException(400, "Your account isn't linked to an NGO yet. Please contact the FoodForAll team.")
     return db.get(NGO, ngo_id)
 
 

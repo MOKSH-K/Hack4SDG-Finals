@@ -59,7 +59,7 @@ class DailyLogEntry(BaseModel):
     @classmethod
     def sold_le_prep(cls, v, info):
         if "prep_count" in info.data and v > info.data["prep_count"]:
-            raise ValueError("sold_count cannot exceed prep_count")
+            raise ValueError("Sold can't be more than prepared")
         return v
 
 

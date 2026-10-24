@@ -30,7 +30,12 @@ window.FFA = (() => {
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const token = storage.get(TOKEN);
     if (auth && token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch {
+      throw new Error("Can't reach FoodForAll right now. Check your connection and try again.");
+    }
     let data = null;
     try { data = await res.json(); } catch { /* empty body */ }
     if (res.status === 401 && auth && token) {
@@ -39,7 +44,11 @@ window.FFA = (() => {
       throw new Error("Session expired - please sign in again");
     }
     if (!res.ok) {
-      const err = new Error((data && data.detail) || res.statusText || "Request failed");
+      // Only show messages the server wrote for people; never raw status text or error objects.
+      const detail = data && typeof data.detail === "string" ? data.detail : null;
+      const fallback = res.status >= 500 ? "Something went wrong on our side. Please try again in a moment."
+        : res.status === 403 ? "You don't have access to that." : "That didn't work. Please try again.";
+      const err = new Error(res.status >= 500 ? fallback : detail || fallback);
       err.status = res.status;
       throw err;
     }
@@ -87,7 +96,31 @@ window.FFA = (() => {
       return `${m}m ${String(s).padStart(2, "0")}s`;
     },
     label: (s) => (s || "").replace(/_/g, " ").toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()),
+    /** "23:00" -> "11 PM", "03:30" -> "3:30 AM" */
+    clock12(hhmm) {
+      if (!hhmm) return "";
+      const [h, m] = hhmm.split(":").map(Number);
+      const suffix = h < 12 ? "AM" : "PM", h12 = h % 12 || 12;
+      return m ? `${h12}:${String(m).padStart(2, "0")} ${suffix}` : `${h12} ${suffix}`;
+    },
   };
+
+  // Plain-language names for internal states, shared by every page.
+  const words = {
+    batch: { INCOMING: "On the way to hub", AVAILABLE: "On sale", SOLD_OUT: "Sold out", RELIEF: "Given to NGOs",
+             EXPIRED: "Expired", DISCARDED: "Thrown away", REJECTED: "Turned away" },
+    donation: { FLAGGED: "Waiting for an NGO", CLAIMED: "Claimed", IN_TRANSIT: "Picked up",
+                DISTRIBUTED: "Delivered", EXPIRED: "Not collected in time" },
+    storage: { HOT: "Kept hot", CHILLED: "Chilled" },
+    diet: { VEG: "Veg", NON_VEG: "Non-veg", VEGAN: "Vegan" },
+  };
+  /** Food-safety summary for a batch: never show internal tags, just whether it passed and why not. */
+  function safety(batch) {
+    if (batch.status === "INCOMING") return { ok: null, text: "Checked on arrival" };
+    if (batch.haccp.verified) return { ok: true, text: "Safety checked" };
+    const failed = batch.haccp.checks.find((c) => !c.ok);
+    return { ok: false, text: failed ? failed.check : "Needs attention" };
+  }
 
   /** Seconds left on a safety clock, given when the payload was fetched and the current tick. */
   function remaining(clock, fetchedAt, nowMs) {
@@ -170,13 +203,31 @@ window.FFA = (() => {
     return setInterval(() => { if (!document.hidden) fn(); }, ms);
   }
 
-  return { api, user, signIn, signOut, guard, toast, fmt, remaining, renderIcons, chart, palette, poll, HOME };
+  return { api, user, signIn, signOut, guard, toast, fmt, words, safety, remaining, renderIcons, chart, palette, poll, HOME };
 })();
 
-/* Nav-bar user widget */
+/* Nav-bar user widget: each person only sees the pages they can use. */
+const NAV = {
+  store: { href: "/store", label: "Night Store" },
+  restaurant: { href: "/restaurant", label: "Restaurant Hub" },
+  darkstore: { href: "/darkstore", label: "Dark Store" },
+  ngo: { href: "/ngo", label: "NGO Portal" },
+  impact: { href: "/analytics", label: "SDG Impact" },
+};
+const NAV_BY_ROLE = {
+  visitor: ["store", "impact"],
+  worker: ["store", "impact"],
+  restaurant: ["restaurant", "impact"],
+  darkstore: ["darkstore", "impact"],
+  ngo: ["ngo", "impact"],
+  admin: ["store", "restaurant", "darkstore", "ngo", "impact"],
+};
+
 function navUser() {
   return {
     user: FFA.user(),
+    links() { return (NAV_BY_ROLE[this.user?.role] || NAV_BY_ROLE.visitor).map((k) => NAV[k]); },
+    active(href) { return location.pathname === href; },
     home() { return this.user ? FFA.HOME[this.user.role] || "/" : "/login"; },
     logout() { FFA.signOut(); },
   };

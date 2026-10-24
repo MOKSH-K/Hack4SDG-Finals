@@ -139,9 +139,9 @@ function landing() {
     tonight() {
       const t = this.s.tonight || {};
       return [
-        { label: "Servings in hubs", value: t.received, hint: "checked in at dark stores" },
+        { label: "Meals collected", value: t.received, hint: "from restaurants tonight" },
         { label: "Sold to workers", value: t.sold, hint: `${FFA.fmt.n(t.orders)} orders` },
-        { label: "In relief pipeline", value: t.in_relief_pipeline, hint: "flagged / claimed / in transit" },
+        { label: "On the way to shelters", value: t.in_relief_pipeline, hint: "waiting for or with an NGO" },
         { label: "Donated", value: t.donated, hint: "servings distributed" },
         { label: "People fed", value: t.people_fed, hint: "at shelters tonight" },
       ];

@@ -7,8 +7,8 @@
       <p class="text-sm text-ink-muted">Restaurant Operations Hub</p>
       <h1 class="font-display text-3xl font-bold" x-text="o.restaurant?.name || 'Loading…'"></h1>
       <p class="text-sm text-ink-muted" x-show="o.restaurant">
-        <span x-text="o.restaurant?.area"></span> · closes <span x-text="o.restaurant?.closing_time"></span> ·
-        28-night avg footfall <span class="tabular-nums" x-text="FFA.fmt.n(o.restaurant?.avg_footfall)"></span>
+        <span x-text="o.restaurant?.area"></span> · closes <span x-text="FFA.fmt.clock12(o.restaurant?.closing_time)"></span> ·
+        usually about <span class="tabular-nums" x-text="FFA.fmt.n(o.restaurant?.avg_footfall)"></span> diners a night
       </p>
     </div>
     <div class="ml-auto flex flex-wrap gap-2 text-sm" x-show="o.tonight_conditions">
@@ -19,7 +19,7 @@
   </header>
 
   <div class="grid gap-6 xl:grid-cols-[1.05fr_1fr]">
-    <!-- ML forecast -->
+    <!-- Surplus forecast -->
     <section class="card min-w-0">
       <div class="flex flex-wrap items-center gap-2">
         <i data-lucide="brain-circuit" class="h-5 w-5 text-sky2"></i>
@@ -38,7 +38,7 @@
             <span class="mt-1 text-xs tabular-nums" :class="p.date === n.date ? 'text-white/90' : 'text-ink-muted'"
                   x-text="Math.round(n.temperature) + '°' + (n.evening_rain_mm ? ' · ' + n.evening_rain_mm + 'mm' : '')"></span>
             <span class="mt-1.5 font-display text-lg font-bold tabular-nums" x-text="n.zero_surplus ? '0' : n.predicted_surplus"></span>
-            <span class="text-[10px]" :class="p.date === n.date ? 'text-white/80' : 'text-ink-dim'">surplus</span>
+            <span class="text-[10px]" :class="p.date === n.date ? 'text-white/80' : 'text-ink-dim'">leftovers</span>
             <span class="mt-1 h-1.5 w-1.5 rounded-full" :class="n.festival ? 'bg-moon' : (n.holiday ? 'bg-violet-500' : 'bg-transparent')" :title="n.festival || n.holiday || ''"></span>
           </button>
         </template>
@@ -55,7 +55,7 @@
           <template x-if="f.inputs?.festival_name"><span class="chip bg-moon/10 text-moon"><i data-lucide="party-popper" class="h-3 w-3"></i><span x-text="f.inputs.festival_name"></span></span></template>
           <template x-if="f.inputs?.holiday_name"><span class="chip bg-violet-500/10 text-violet-700"><i data-lucide="calendar-days" class="h-3 w-3"></i><span x-text="f.inputs.holiday_name"></span></span></template>
         </div>
-        <p class="mt-1.5 text-xs text-ink-dim" x-text="f.weather?.source === 'live' ? 'Weather from the live forecast · holidays and festivals from the 2025–2031 calendar' : 'Beyond the 16-day forecast, so weather is a seasonal estimate · holidays and festivals from the 2025–2031 calendar'"></p>
+        <p class="mt-1.5 text-xs text-ink-dim" x-show="f.weather?.source !== 'live'">The live weather forecast only covers the next 16 days, so this is a typical-weather estimate.</p>
       </div>
 
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -79,19 +79,19 @@
           </template>
           <div class="grid gap-3 sm:grid-cols-3" x-show="!f.zero_surplus">
             <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
-              <div class="text-xs uppercase tracking-wide text-ink-dim">Predicted surplus</div>
+              <div class="text-xs uppercase tracking-wide text-ink-dim">Expected leftovers</div>
               <div class="kpi" x-text="FFA.fmt.n(f.predicted_surplus_servings)"></div>
-              <div class="text-xs text-ink-muted" x-text="`80% range ${f.interval_80[0]}–${f.interval_80[1]} servings`"></div>
+              <div class="text-xs text-ink-muted" x-text="`servings · likely ${f.interval_80[0]}–${f.interval_80[1]}`"></div>
             </div>
             <div class="rounded-xl border border-rescue/40 bg-rescue/5 p-4">
-              <div class="text-xs uppercase tracking-wide text-ink-dim">NGO pre-notification</div>
+              <div class="text-xs uppercase tracking-wide text-ink-dim">Promised to NGOs</div>
               <div class="kpi text-rescue" x-text="FFA.fmt.n(f.ngo_prenotification_qty)"></div>
-              <div class="text-xs text-ink-muted">servings promised early</div>
+              <div class="text-xs text-ink-muted">shared with shelters before you close</div>
             </div>
             <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
-              <div class="text-xs uppercase tracking-wide text-ink-dim">Safety buffer</div>
+              <div class="text-xs uppercase tracking-wide text-ink-dim">Kept in reserve</div>
               <div class="kpi" x-text="f.safety_margin_pct + '%'"></div>
-              <div class="text-xs text-ink-muted">held back for model uncertainty</div>
+              <div class="text-xs text-ink-muted">not promised, in case it's a busier night</div>
             </div>
           </div>
           <template x-for="w in f.warnings" :key="w">
@@ -99,8 +99,8 @@
           </template>
           <div class="mt-5 grid gap-5 md:grid-cols-2">
             <div>
-              <h3 class="mb-2 text-sm font-semibold">Why: driving factors</h3>
-              <template x-if="!f.drivers.length"><p class="text-sm text-ink-muted">A typical night: no unusual drivers.</p></template>
+              <h3 class="mb-2 text-sm font-semibold">Why this number</h3>
+              <template x-if="!f.drivers.length"><p class="text-sm text-ink-muted">A typical night, with nothing unusual expected.</p></template>
               <ul class="space-y-2">
                 <template x-for="d in f.drivers" :key="d.factor">
                   <li class="text-sm">
@@ -162,7 +162,7 @@
   <section class="card mt-6">
     <div class="flex items-center gap-2">
       <i data-lucide="truck" class="h-5 w-5 text-rescue"></i>
-      <h2 class="card-title">Dispatch surplus to a dark store</h2>
+      <h2 class="card-title">Send leftovers to a dark store</h2>
     </div>
     <form class="mt-4 grid gap-4 md:grid-cols-4" @submit.prevent="dispatch()">
       <div class="md:col-span-2"><label class="label" for="dn">Dish name</label><input id="dn" class="input" x-model="d.dish_name" required minlength="2" placeholder="e.g. Chicken Dum Biryani"></div>
@@ -193,22 +193,22 @@
         <select id="dds" class="input" x-model.number="d.dark_store_id"><template x-for="s in o.dark_stores || []" :key="s.id"><option :value="s.id" x-text="s.name" :selected="s.id === d.dark_store_id"></option></template></select></div>
       <div class="flex flex-col justify-end md:col-span-2">
         <p class="mb-2 text-xs" :class="expiryPreview().capped ? 'text-moon' : 'text-ink-muted'" x-text="expiryPreview().text"></p>
-        <button class="btn-primary" :disabled="busy"><i data-lucide="send" class="h-4 w-4"></i>Dispatch batch</button>
+        <button class="btn-primary" :disabled="busy"><i data-lucide="send" class="h-4 w-4"></i>Send to dark store</button>
       </div>
     </form>
 
     <div class="mt-6 overflow-x-auto">
       <table class="w-full min-w-[720px] text-sm">
-        <thead><tr class="border-b border-night-600"><th class="table-head py-2">Batch</th><th class="table-head">Dish</th><th class="table-head">Qty</th><th class="table-head">Status</th><th class="table-head">Expires</th><th class="table-head">HACCP</th></tr></thead>
+        <thead><tr class="border-b border-night-600"><th class="table-head py-2">Sent</th><th class="table-head">Dish</th><th class="table-head">Sold</th><th class="table-head">Status</th><th class="table-head">Safe until</th><th class="table-head">Safety</th></tr></thead>
         <tbody class="divide-y divide-night-700">
           <template x-for="b in o.dispatches || []" :key="b.id">
             <tr>
-              <td class="py-2 font-mono text-xs text-ink-muted" x-text="b.code"></td>
+              <td class="py-2 tabular-nums text-ink-muted" x-text="FFA.fmt.time(b.dispatched_at)"></td>
               <td><span x-text="b.dish_name"></span><span class="block text-xs text-ink-dim" x-text="b.status_note"></span></td>
               <td class="tabular-nums" x-text="`${b.sold_qty} sold / ${b.initial_qty}`"></td>
-              <td><span class="chip" :class="statusTone(b.status)" x-text="FFA.fmt.label(b.status)"></span></td>
+              <td><span class="chip" :class="statusTone(b.status)" x-text="FFA.words.batch[b.status]"></span></td>
               <td class="tabular-nums" x-text="FFA.fmt.time(b.clock.expires_at)"></td>
-              <td class="font-mono text-xs" :class="b.haccp.verified ? 'text-rescue' : 'text-ink-dim'" x-text="b.haccp.verified ? b.haccp.tag : 'pending'"></td>
+              <td class="text-xs" :class="FFA.safety(b).ok ? 'text-rescue' : (FFA.safety(b).ok === false ? 'text-alert' : 'text-ink-dim')" x-text="(FFA.safety(b).ok ? '✓ ' : '') + FFA.safety(b).text"></td>
             </tr>
           </template>
         </tbody>
@@ -249,7 +249,7 @@ function restaurantPage() {
         this.drawHistory();
       } catch (e) { FFA.toast(e.message, "err"); }
     },
-    // Weather and calendar come from the server (Open-Meteo + 2026-2031 calendar); nothing to enter here.
+    // Weather and calendar come from the server (Open-Meteo + 2025-2031 calendar); nothing to enter here.
     async loadOutlook() {
       try { this.outlook = (await FFA.api("/api/v1/restaurant/outlook?days=7")).nights; }
       catch (e) { FFA.toast(e.message, "err"); }
@@ -295,14 +295,17 @@ function restaurantPage() {
       const exp = new Date(new Date(this.d.cooked_at).getTime() + hours * 3600000);
       if (isNaN(exp)) return { text: "", capped: false };
       const capped = this.d.shelf_life_hours > cap;
-      return { capped, text: `Safe until ${pad(exp.getHours())}:${pad(exp.getMinutes())}` +
-        (capped ? ` (capped at ${cap} h for ${this.d.storage.toLowerCase()} storage)` : "") + ". Routed to NGOs 2 h before." };
+      const ngo = new Date(exp.getTime() - 2 * 3600000);
+      return { capped, text: `Safe to eat until ${pad(exp.getHours())}:${pad(exp.getMinutes())}` +
+        (capped ? ` (the limit for ${this.d.storage === "HOT" ? "food kept hot" : "chilled food"} is ${cap} hours)` : "") +
+        `. Anything unsold goes to NGOs from ${pad(ngo.getHours())}:${pad(ngo.getMinutes())}.` };
     },
     async dispatch() {
       this.busy = true;
       try {
         const b = await FFA.api("/api/v1/restaurant/dispatch", { method: "POST", body: this.d });
-        FFA.toast(`${b.code} dispatched: ${b.initial_qty} × ${b.dish_name}`);
+        const hub = (this.o.dark_stores || []).find((s) => s.id === b.dark_store_id);
+        FFA.toast(`Sent ${b.initial_qty} × ${b.dish_name}${hub ? " to " + hub.name : ""}`);
         this.d.dish_name = ""; this.d.allergens = [];
         await this.load();
       } catch (e) { FFA.toast(e.message, "err"); } finally { this.busy = false; }

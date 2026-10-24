@@ -55,7 +55,7 @@ def test_rarely_seen_weather_warns(client, monkeypatch):
     monkeypatch.setitem(forecaster.meta["weather_support"], "Heatwave", 2)
     r = client.post("/api/v1/predict-surplus", json={
         "date": "2026-10-28", "weather_condition": "Heatwave", "temperature": 40, "restaurant_id": 1}).json()
-    assert r["warnings"] and "2 'Heatwave' nights" in r["warnings"][0]
+    assert r["warnings"] and "heatwave nights yet (2 so far)" in r["warnings"][0]
 
 
 # ---------- concurrency ----------
@@ -317,3 +317,34 @@ def test_calendar_covers_next_five_years():
         assert HOLIDAYS[date(year, 1, 26)] == "Republic Day"
         assert any("Diwali" in n for d, n in FESTIVALS.items() if d.year == year)
         assert any("Holi" in n for d, n in HOLIDAYS.items() if d.year == year)
+
+
+# ---------- plain language for end users ----------
+
+def test_validation_errors_are_plain_sentences(client, auth):
+    r = client.post("/api/v1/store/orders", headers=auth("worker"),
+                    json={"dark_store_id": 1, "items": [{"batch_id": 1, "qty": 1}], "delivery_address": "x"})
+    assert r.status_code == 422
+    assert r.json()["detail"] == "Delivery address is too short."
+    r = client.post("/api/v1/restaurant/daily-log", headers=auth("restaurant"), json={
+        "closing_time": "23:30", "actual_footfall": 350,
+        "entries": [{"dish_category": "Curries", "prep_count": 10, "sold_count": 40}]})
+    assert r.json()["detail"] == "Sold can't be more than prepared."
+
+
+def test_activity_log_is_per_hub_and_free_of_codes(client, auth):
+    import re
+    events = client.get("/api/v1/darkstore/overview", headers=auth("darkstore")).json()["events"]
+    assert events
+    for e in events:
+        assert not re.search(r"\b(B|REL|ORD)-[0-9A-F]{6}\b|#\d|@|\b[A-Z]{4,}_?[A-Z]*\b", e["message"]), e["message"]
+    with SessionLocal() as db:
+        from app.models import AuditEvent
+        other = db.scalars(select(AuditEvent).where(AuditEvent.dark_store_id != 1)).all()
+    assert other and not {e.message for e in other} & {e["message"] for e in events}
+
+
+def test_operations_lead_can_open_restaurant_hub(client):
+    r = client.post("/api/v1/auth/login", json={"email": "nikhil.menon@foodforall.in", "password": "foodforall2026"})
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert client.get("/api/v1/restaurant/overview", headers=h).status_code == 200

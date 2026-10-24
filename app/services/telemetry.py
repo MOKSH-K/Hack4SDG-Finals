@@ -43,17 +43,20 @@ def _apply_excursion(db: Session, dark_store_id: int, zone: str, temp: float, at
     batches = db.scalars(select(SurplusBatch).where(
         SurplusBatch.dark_store_id == dark_store_id, SurplusBatch.storage == zone,
         SurplusBatch.status.in_(["AVAILABLE", "RELIEF"]))).all()
+    unit = "Hot cabinet" if zone == "HOT" else "Fridge"
     for b in batches:
         if critical:
             b.status, b.available_qty = "DISCARDED", 0
-            b.status_note = f"Discarded: critical {temp} °C excursion"
+            b.status_note = f"Thrown away: {unit.lower()} reached {temp} °C, which is unsafe"
             bundle = db.scalar(select(ReliefBundle).where(ReliefBundle.batch_id == b.id,
                                                           ReliefBundle.status.in_(["FLAGGED", "CLAIMED"])))
             if bundle:
                 bundle.status = "EXPIRED"
-            audit(db, "discard", f"{b.code} discarded after {temp} °C {zone} excursion")
+            audit(db, "discard", f"Threw away {b.dish_name}: {unit.lower()} reached {temp} °C", dark_store_id)
         elif not b.temp_breach:
             b.temp_breach = True
             b.expires_at = min(b.expires_at, at + timedelta(hours=BREACH_GRACE_HOURS))
-            b.status_note = f"Temperature excursion {temp} °C - safety clock shortened"
-            audit(db, "excursion", f"{b.code}: {zone} zone at {temp} °C, expiry pulled to {b.expires_at:%H:%M}")
+            problem = "got too warm" if zone == "CHILLED" else "cooled down"
+            b.status_note = f"{unit} {problem} ({temp} °C), so it must be eaten sooner"
+            audit(db, "excursion", f"{unit} at {temp} °C: {b.dish_name} must now be eaten by {b.expires_at:%H:%M}",
+                  dark_store_id)

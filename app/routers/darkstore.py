@@ -27,7 +27,7 @@ def _store_id(user: User, db: Session, requested: int | None = None) -> int:
     else:
         sid = user.dark_store_id
     if sid is None:
-        raise HTTPException(400, "This account is not linked to a dark store")
+        raise HTTPException(400, "Your account isn't linked to a hub yet. Please contact the FoodForAll team.")
     return sid
 
 
@@ -61,7 +61,8 @@ def overview(store_id: int | None = None, db: Session = Depends(get_db),
     bundles = db.scalars(select(ReliefBundle).where(ReliefBundle.dark_store_id == sid)
                          .order_by(ReliefBundle.flagged_at.desc())).all()
     orders = db.scalars(select(Order).where(Order.dark_store_id == sid).order_by(Order.created_at.desc()).limit(15)).all()
-    events = db.scalars(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(25)).all()
+    events = db.scalars(select(AuditEvent).where(AuditEvent.dark_store_id == sid)
+                        .order_by(AuditEvent.created_at.desc()).limit(25)).all()
     return {
         "store": {"id": store.id, "name": store.name, "area": store.area,
                   "hot_capacity": store.hot_capacity, "chilled_capacity": store.chilled_capacity},
@@ -75,7 +76,7 @@ def overview(store_id: int | None = None, db: Session = Depends(get_db),
         "popularity": sorted(({"dish_name": k, "orders": v} for k, v in pop.items()), key=lambda x: -x["orders"])[:8],
         "relief": [bundle_out(r, t) for r in bundles],
         "orders": [order_out(o) for o in orders],
-        "events": [{"kind": e.kind, "message": e.message, "at": e.created_at.isoformat()} for e in events],
+        "events": [{"message": e.message, "at": e.created_at.isoformat()} for e in events],
     }
 
 
@@ -100,11 +101,11 @@ def discard(batch_id: int, db: Session = Depends(get_db), user: User = Depends(r
     lock_for_write(db)
     b = db.get(SurplusBatch, batch_id)
     if b is None or b.dark_store_id != sid:
-        raise HTTPException(404, "Batch not found at this dark store")
+        raise HTTPException(404, "We couldn't find that food at this hub.")
     if b.status not in ("INCOMING", "AVAILABLE"):
-        raise HTTPException(409, f"Cannot discard a {b.status} batch")
-    b.status, b.available_qty, b.status_note = "DISCARDED", 0, "Manually discarded by store manager"
-    audit(db, "discard", f"{b.code} manually discarded")
+        raise HTTPException(409, "This food is no longer on sale, so it can't be thrown away from here.")
+    audit(db, "discard", f"Threw away {b.available_qty} × {b.dish_name}", sid)
+    b.status, b.available_qty, b.status_note = "DISCARDED", 0, "Thrown away by the hub manager"
     db.commit()
     return batch_out(b, now())
 
@@ -118,11 +119,12 @@ def sweep(body: SweepIn, db: Session = Depends(get_db), _: User = Depends(requir
 @router.post("/telemetry/excursion")
 def excursion(body: ExcursionIn, store_id: int | None = None, db: Session = Depends(get_db),
               user: User = Depends(require_roles("darkstore"))):
-    """Drill: simulate a fridge / hot-cabinet failure for a few minutes."""
+    """Safety drill (operations lead only in the UI): simulate a fridge / hot-cabinet failure for a few minutes."""
     sid = _store_id(user, db, store_id)
     start_excursion(sid, body.zone, body.minutes, now())
     run_sweep(db, telemetry=True)
-    return {"ok": True, "message": f"{body.zone} zone excursion simulated for {body.minutes} min"}
+    unit = "Hot cabinet" if body.zone == "HOT" else "Fridge"
+    return {"ok": True, "message": f"Drill started: {unit.lower()} fault for {body.minutes} minutes"}
 
 
 def _batch_store(db: Session, batch_id: int, user: User) -> int | None:

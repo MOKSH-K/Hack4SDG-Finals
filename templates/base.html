@@ -67,11 +67,9 @@
         <span>Food<span class="text-rescue">For</span>All</span>
       </a>
       <div class="ml-4 hidden items-center gap-1 text-sm md:flex">
-        <a href="/store" class="rounded-lg px-3 py-1.5 text-ink-muted hover:bg-night-700 hover:text-ink">Night Store</a>
-        <a href="/restaurant" class="rounded-lg px-3 py-1.5 text-ink-muted hover:bg-night-700 hover:text-ink">Restaurants</a>
-        <a href="/darkstore" class="rounded-lg px-3 py-1.5 text-ink-muted hover:bg-night-700 hover:text-ink">Dark Stores</a>
-        <a href="/ngo" class="rounded-lg px-3 py-1.5 text-ink-muted hover:bg-night-700 hover:text-ink">NGO Portal</a>
-        <a href="/analytics" class="rounded-lg px-3 py-1.5 text-ink-muted hover:bg-night-700 hover:text-ink">SDG Impact</a>
+        <template x-for="l in links()" :key="l.href">
+          <a :href="l.href" class="rounded-lg px-3 py-1.5 hover:bg-night-700 hover:text-ink" :class="active(l.href) ? 'bg-olive-soft font-medium text-rescue' : 'text-ink-muted'" :aria-current="active(l.href) ? 'page' : null" x-text="l.label"></a>
+        </template>
       </div>
       <div class="ml-auto flex items-center gap-2 text-sm">
         <template x-if="user">
@@ -84,11 +82,9 @@
       </div>
     </nav>
     <div class="flex gap-1 overflow-x-auto border-t border-night-600/40 px-4 py-2 text-xs md:hidden">
-      <a href="/store" class="whitespace-nowrap rounded-lg px-2 py-1 text-ink-muted">Night Store</a>
-      <a href="/restaurant" class="whitespace-nowrap rounded-lg px-2 py-1 text-ink-muted">Restaurants</a>
-      <a href="/darkstore" class="whitespace-nowrap rounded-lg px-2 py-1 text-ink-muted">Dark Stores</a>
-      <a href="/ngo" class="whitespace-nowrap rounded-lg px-2 py-1 text-ink-muted">NGO</a>
-      <a href="/analytics" class="whitespace-nowrap rounded-lg px-2 py-1 text-ink-muted">Impact</a>
+      <template x-for="l in links()" :key="l.href">
+        <a :href="l.href" class="whitespace-nowrap rounded-lg px-2 py-1" :class="active(l.href) ? 'bg-olive-soft font-medium text-rescue' : 'text-ink-muted'" :aria-current="active(l.href) ? 'page' : null" x-text="l.label"></a>
+      </template>
     </div>
   </header>
 

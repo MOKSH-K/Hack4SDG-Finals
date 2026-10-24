@@ -43,16 +43,16 @@ def safety_clock(batch: SurplusBatch, at: datetime) -> dict:
 
 def haccp_tag(batch: SurplusBatch, at: datetime) -> dict:
     checks = [
-        {"check": "Allergens declared", "ok": batch.allergens is not None},
-        {"check": f"Storage class {'≥63 °C hot-hold' if batch.storage == 'HOT' else '≤5 °C chilled'}",
+        {"check": "Allergens listed", "ok": batch.allergens is not None},
+        {"check": "Kept hot (63 °C or above)" if batch.storage == "HOT" else "Kept chilled (5 °C or below)",
          "ok": batch.storage in MAX_SHELF_LIFE_HOURS},
-        {"check": "Entry temperature in safe range",
+        {"check": "Right temperature on arrival",
          "ok": batch.entry_temp_c is not None and temp_in_range(batch.storage, batch.entry_temp_c)},
         # Critical excursions discard the batch outright (see telemetry), so a live batch can only
         # have had a minor one - still safe, with its use-by already pulled in.
-        {"check": "Minor temperature excursion: use-by shortened" if batch.temp_breach
-                  else "No cold-chain / hot-hold excursion", "ok": batch.status != "DISCARDED"},
-        {"check": "Within shelf-life SLA", "ok": at < batch.expires_at},
+        {"check": "Brief temperature problem: must be eaten sooner" if batch.temp_breach
+                  else "No temperature problems", "ok": batch.status != "DISCARDED"},
+        {"check": "Still within its safe time", "ok": at < batch.expires_at},
     ]
     digest = hashlib.sha256(
         f"{batch.code}|{batch.cooked_at.isoformat()}|{batch.storage}|{batch.entry_temp_c}|{batch.expires_at.isoformat()}"

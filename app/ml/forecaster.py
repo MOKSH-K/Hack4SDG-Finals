@@ -196,17 +196,18 @@ class SurplusForecaster:
         warnings = []
         seen = self.meta.get("weather_support", {}).get(weather_condition)
         if seen is not None and seen < MIN_SUPPORT:
-            warnings.append(f"Low confidence: the model has seen only {seen} '{weather_condition}' nights "
-                            f"in its training history, so this condition's effect is not learned yet.")
+            warnings.append(f"We haven't seen many {weather_condition.lower()} nights yet ({seen} so far), "
+                            f"so this estimate is less certain than usual.")
         return {
             "predicted_surplus_servings": int(round(total)),
             "interval_80": [int(max(0, round(total - 1.28 * total_std))), int(round(total + 1.28 * total_std))],
             "ngo_prenotification_qty": prenotify,
             "safety_margin_pct": round(margin, 1),
             "zero_surplus": zero,
-            "message": ("No meaningful surplus expected tonight - NGOs will not be pre-notified."
+            "message": ("Little or nothing should be left over, so NGOs won't be alerted."
                         if zero else
-                        f"Pre-notify NGOs for {prenotify} servings (holding back a {margin:.0f}% safety buffer)."),
+                        f"NGOs will be told to expect about {prenotify} servings "
+                        f"({margin:.0f}% kept in reserve in case the night is busier)."),
             "breakdown": breakdown,
             "drivers": self._explain(df, total),
             "warnings": warnings,
@@ -226,19 +227,19 @@ class SurplusForecaster:
             if abs(delta) >= 0.5:
                 sign = "+" if delta >= 0 else ""
                 drivers.append({"factor": label, "delta_servings": round(delta, 1), "pct": round(pct, 1),
-                                "text": f"{label} ({sign}{pct:.0f}% surplus expected)"})
+                                "text": f"{label}: {sign}{pct:.0f}% leftovers"})
 
         if row["weather_condition"] != "Clear":
             counterfactual(row["weather_condition"], weather_condition="Clear")
         if abs(row["temperature"] - BASELINE["temperature"]) >= 4:
-            counterfactual(f"{row['temperature']:.0f}°C temperature", temperature=BASELINE["temperature"])
+            counterfactual(f"{row['temperature']:.0f} °C evening", temperature=BASELINE["temperature"])
         if row["is_festival"]:
             counterfactual("Festival over-prep", is_festival=0)
         if row["is_holiday"]:
             counterfactual("Public holiday", is_holiday=0)
         if row["day_of_week"] != BASELINE_WEEKDAY:
             day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][row["day_of_week"]]
-            counterfactual(f"{day} pattern", day_of_week=BASELINE_WEEKDAY,
+            counterfactual(f"{day} night", day_of_week=BASELINE_WEEKDAY,
                            is_weekend=int(BASELINE_WEEKDAY >= 4))
         return sorted(drivers, key=lambda d: -abs(d["delta_servings"]))
 

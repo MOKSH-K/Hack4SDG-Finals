@@ -36,14 +36,14 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     if creds is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please sign in to continue.")
     try:
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has expired. Please sign in again.")
     user = db.get(User, int(payload["sub"]))
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User no longer exists")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This account no longer exists.")
     return user
 
 
@@ -51,6 +51,6 @@ def require_roles(*roles: str):
     """Dependency factory: admins pass every role check."""
     def checker(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles and user.role != "admin":
-            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Requires role: {', '.join(roles)}")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have access to this page.")
         return user
     return checker

@@ -21,8 +21,9 @@ def lock_for_write(db: Session) -> None:
         raw.execute("BEGIN IMMEDIATE")
 
 
-def audit(db: Session, kind: str, message: str) -> None:
-    db.add(AuditEvent(kind=kind, message=message))
+def audit(db: Session, kind: str, message: str, dark_store_id: int | None = None) -> None:
+    """Record an activity-log entry. Messages appear in the hub's activity feed: no codes, IDs or emails."""
+    db.add(AuditEvent(kind=kind, message=message, dark_store_id=dark_store_id))
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

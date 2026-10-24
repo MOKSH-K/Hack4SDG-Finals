@@ -6,7 +6,7 @@
     <div>
       <p class="text-sm text-ink-muted">Dark Store Manager</p>
       <h1 class="font-display text-3xl font-bold" x-text="o.store?.name || 'Loading…'"></h1>
-      <p class="text-sm text-ink-muted">Server time <span class="tabular-nums" x-text="FFA.fmt.time(o.server_time)"></span> · auto-refresh 10 s</p>
+      <p class="text-sm text-ink-muted" x-show="o.store" x-text="`${o.store?.area} · live, updated ${FFA.fmt.time(o.server_time)}`"></p>
     </div>
     <template x-if="o.stores?.length">
       <select class="input w-auto" x-model.number="storeId" @change="load()" aria-label="Dark store">
@@ -14,8 +14,7 @@
       </select>
     </template>
     <div class="ml-auto flex flex-wrap gap-2">
-      <button class="btn-ghost" @click="sweep(false)" :disabled="busy"><i data-lucide="refresh-cw" class="h-4 w-4"></i>Run routing sweep</button>
-      <button class="btn-moon" @click="sweep(true)" :disabled="busy"><i data-lucide="siren" class="h-4 w-4"></i>Simulate 3:30 AM cut-off</button>
+      <button class="btn-moon" @click="closeNight()" :disabled="busy" title="Stop selling and give everything left to NGOs now"><i data-lucide="moon" class="h-4 w-4"></i>Close for the night</button>
     </div>
   </header>
 
@@ -35,7 +34,7 @@
           <div class="ml-auto text-right">
             <div class="kpi" :class="latest(z.key)?.ok === false ? 'text-alert' : ''" x-text="latest(z.key) ? latest(z.key).c.toFixed(1) + ' °C' : '—'"></div>
             <span class="chip" :class="latest(z.key)?.ok === false ? 'bg-alert/15 text-alert' : 'bg-rescue/15 text-rescue'">
-              <span x-text="latest(z.key)?.ok === false ? '⚠ Excursion' : '✓ In range'"></span>
+              <span x-text="latest(z.key)?.ok === false ? (z.key === 'HOT' ? '⚠ Too cold' : '⚠ Too warm') : '✓ Safe'"></span>
             </span>
           </div>
         </div>
@@ -44,7 +43,9 @@
           <span>Capacity</span>
           <div class="h-2 flex-1 rounded-full bg-night-700"><div class="h-2 rounded-full" :class="z.key === 'HOT' ? 'bg-orange-500' : 'bg-sky2'" :style="`width:${Math.min(100, 100 * (o.capacity_used?.[z.key] || 0) / (z.key === 'HOT' ? o.store?.hot_capacity : o.store?.chilled_capacity))}%`"></div></div>
           <span class="tabular-nums" x-text="`${o.capacity_used?.[z.key] || 0} / ${z.key === 'HOT' ? o.store?.hot_capacity : o.store?.chilled_capacity}`"></span>
-          <button class="btn-danger px-2 py-1 text-xs" @click="excursion(z.key)" :disabled="busy" x-text="z.key === 'HOT' ? 'Simulate cabinet fault' : 'Simulate fridge fault'"></button>
+          <template x-if="isLead()">
+            <button class="btn-danger px-2 py-1 text-xs" @click="excursion(z.key)" :disabled="busy" title="Safety drill: see how the hub reacts to a temperature fault" x-text="z.key === 'HOT' ? 'Cabinet fault drill' : 'Fridge fault drill'"></button>
+          </template>
         </div>
       </section>
     </template>
@@ -57,10 +58,10 @@
       <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <template x-for="b in incoming()" :key="b.id">
           <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
-            <div class="flex justify-between gap-2"><span class="font-semibold" x-text="b.dish_name"></span><span class="font-mono text-xs text-ink-dim" x-text="b.code"></span></div>
-            <p class="text-xs text-ink-muted" x-text="`${b.initial_qty} servings · ${b.restaurant} · ${b.storage === 'HOT' ? 'hot-held' : 'chilled'} · dispatched ${FFA.fmt.time(b.dispatched_at)}`"></p>
+            <div class="font-semibold" x-text="b.dish_name"></div>
+            <p class="text-xs text-ink-muted" x-text="`${b.initial_qty} servings · ${b.restaurant} · ${FFA.words.storage[b.storage].toLowerCase()} · sent ${FFA.fmt.time(b.dispatched_at)}`"></p>
             <div class="mt-3 flex items-end gap-2">
-              <div class="flex-1"><label class="label" :for="'et' + b.id">Probe temp at intake (°C)</label>
+              <div class="flex-1"><label class="label" :for="'et' + b.id">Food temperature on arrival (°C)</label>
                 <input :id="'et' + b.id" type="number" step="0.1" class="input" x-model.number="entryTemps[b.id]"></div>
               <button class="btn-primary" @click="receive(b)" :disabled="busy">Check in</button>
             </div>
@@ -74,37 +75,37 @@
   <section class="card mt-6">
     <div class="flex flex-wrap items-center gap-2">
       <h2 class="card-title flex items-center gap-2"><i data-lucide="warehouse" class="h-5 w-5 text-moon"></i>Live inventory</h2>
-      <span class="text-xs text-ink-muted">Sorted by safety expiry · items move to NGO relief 2 h before expiry</span>
+      <span class="text-xs text-ink-muted">Soonest to expire first · anything unsold goes to NGOs 2 hours before its safe time ends</span>
     </div>
     <div class="mt-4 overflow-x-auto">
       <table class="w-full min-w-[900px] text-sm">
         <thead><tr class="border-b border-night-600">
-          <th class="table-head py-2">Dish / batch</th><th class="table-head">Zone</th><th class="table-head">Stock</th>
-          <th class="table-head">Orders</th><th class="table-head">Safety clock</th><th class="table-head">HACCP</th><th class="table-head text-right">Actions</th>
+          <th class="table-head py-2">Dish</th><th class="table-head">Kept</th><th class="table-head">Portions left</th>
+          <th class="table-head">Ordered</th><th class="table-head">Time left</th><th class="table-head">Safety</th><th class="table-head text-right">Actions</th>
         </tr></thead>
         <tbody class="divide-y divide-night-700">
           <template x-for="b in stocked()" :key="b.id">
             <tr :class="b.temp_breach && 'bg-alert/5'">
               <td class="py-2.5">
                 <div class="font-medium" x-text="b.dish_name"></div>
-                <div class="text-xs text-ink-dim"><span class="font-mono" x-text="b.code"></span> · <span x-text="b.restaurant"></span></div>
-                <div class="text-xs text-moon" x-show="b.status_note" x-text="b.status_note"></div>
+                <div class="text-xs text-ink-dim" x-text="b.restaurant"></div>
+                <div class="text-xs text-moon" x-show="b.status_note && b.status !== 'RELIEF'" x-text="b.status_note"></div>
               </td>
               <td><span class="chip" :class="b.storage === 'HOT' ? 'bg-orange-500/15 text-orange-700' : 'bg-sky2/15 text-sky2'" x-text="b.storage === 'HOT' ? 'Hot' : 'Chilled'"></span></td>
               <td class="w-40">
-                <div class="flex justify-between text-xs"><span class="tabular-nums" x-text="`${b.available_qty} / ${b.initial_qty}`"></span><span class="chip px-1.5" :class="statusTone(b.status)" x-text="FFA.fmt.label(b.status)"></span></div>
+                <div class="flex justify-between text-xs"><span class="tabular-nums" x-text="`${b.available_qty} / ${b.initial_qty}`"></span><span class="chip px-1.5" :class="statusTone(b.status)" x-text="FFA.words.batch[b.status]"></span></div>
                 <div class="mt-1 h-1.5 rounded-full bg-night-700"><div class="h-1.5 rounded-full bg-rescue" :style="`width:${100 * b.available_qty / b.initial_qty}%`"></div></div>
               </td>
               <td class="tabular-nums" x-text="b.popularity"></td>
               <td class="tabular-nums">
                 <div :class="clockTone(b)" x-text="clockText(b)"></div>
-                <div class="text-xs text-ink-dim" x-text="'expires ' + FFA.fmt.time(b.clock.expires_at)"></div>
+                <div class="text-xs text-ink-dim" x-text="'safe until ' + FFA.fmt.time(b.clock.expires_at)"></div>
               </td>
-              <td><span class="font-mono text-xs" :class="b.haccp.verified ? 'text-rescue' : 'text-alert'" :title="b.haccp.checks.filter(c => !c.ok).map(c => '✗ ' + c.check).join('\n') || 'All checks passed'" x-text="b.haccp.verified ? b.haccp.tag : 'FAILED'"></span></td>
+              <td><span class="text-xs" :class="FFA.safety(b).ok ? 'text-rescue' : 'text-alert'" x-text="(FFA.safety(b).ok ? '✓ ' : '✗ ') + FFA.safety(b).text"></span></td>
               <td class="text-right">
                 <template x-if="b.status === 'AVAILABLE'">
                   <div class="flex justify-end gap-1">
-                    <button class="btn-ghost px-2 py-1 text-xs" @click="openOverride(b)">Shelf life</button>
+                    <button class="btn-ghost px-2 py-1 text-xs" @click="openOverride(b)">Change safe time</button>
                     <button class="btn-danger px-2 py-1 text-xs" @click="discard(b)">Discard</button>
                   </div>
                 </template>
@@ -132,12 +133,12 @@
 
     <!-- Relief queue -->
     <section class="card">
-      <h2 class="card-title flex items-center gap-2"><i data-lucide="hand-heart" class="h-5 w-5 text-rescue"></i>Relief bundles from this hub</h2>
+      <h2 class="card-title flex items-center gap-2"><i data-lucide="hand-heart" class="h-5 w-5 text-rescue"></i>Donations from this hub</h2>
       <ul class="mt-4 space-y-2">
         <template x-for="r in (o.relief || []).slice(0, 8)" :key="r.id">
           <li class="flex items-center gap-2 rounded-lg bg-night-900/60 px-3 py-2 text-sm">
             <span class="min-w-0 flex-1"><span class="block truncate" x-text="`${r.servings} × ${r.dish_name}`"></span><span class="text-xs text-ink-dim" x-text="r.ngo || r.reason"></span></span>
-            <span class="chip" :class="reliefTone(r.status)" x-text="FFA.fmt.label(r.status)"></span>
+            <span class="chip" :class="reliefTone(r.status)" x-text="FFA.words.donation[r.status]"></span>
           </li>
         </template>
       </ul>
@@ -157,15 +158,15 @@
   <!-- Override modal -->
   <div x-show="ov.batch" x-transition.opacity class="fixed inset-0 z-50 grid place-items-center bg-[#2d332c]/40 p-4" @keydown.escape.window="ov.batch = null" @click.self="ov.batch = null">
     <form class="card w-full max-w-md" @submit.prevent="saveOverride()" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
-      <h2 id="ovTitle" class="card-title">Manual shelf-life override</h2>
-      <p class="mt-1 text-sm text-ink-muted" x-text="ov.batch ? `${ov.batch.dish_name} · cooked ${FFA.fmt.time(ov.batch.cooked_at)} · max ${ov.batch.storage === 'HOT' ? 6 : 24} h after cooking` : ''"></p>
+      <h2 id="ovTitle" class="card-title">Change how long this food is safe</h2>
+      <p class="mt-1 text-sm text-ink-muted" x-text="ov.batch ? `${ov.batch.dish_name} · cooked ${FFA.fmt.time(ov.batch.cooked_at)} · can be kept at most ${ov.batch.storage === 'HOT' ? 6 : 24} hours after cooking` : ''"></p>
       <div class="mt-4 space-y-3">
-        <div><label class="label" for="ovexp">New safety expiry</label><input id="ovexp" type="datetime-local" class="input" x-model="ov.expires_at" required></div>
-        <div><label class="label" for="ovr">Reason (logged for audit)</label><input id="ovr" class="input" x-model="ov.reason" required minlength="3" placeholder="e.g. Probe check at 58 °C, shortening"></div>
+        <div><label class="label" for="ovexp">Safe to eat until</label><input id="ovexp" type="datetime-local" class="input" x-model="ov.expires_at" required></div>
+        <div><label class="label" for="ovr">Reason (saved in the activity log)</label><input id="ovr" class="input" x-model="ov.reason" required minlength="3" placeholder="e.g. Temperature check showed 58 °C"></div>
       </div>
       <div class="mt-5 flex justify-end gap-2">
         <button type="button" class="btn-ghost" @click="ov.batch = null">Cancel</button>
-        <button class="btn-moon" :disabled="busy">Save override</button>
+        <button class="btn-moon" :disabled="busy">Save</button>
       </div>
     </form>
   </div>
@@ -202,11 +203,11 @@ function darkstorePage() {
     stocked() { return (this.o.batches || []).filter((b) => b.status !== "INCOMING"); },
     secs(b) { return FFA.remaining(b.clock, this.fetchedAt, this.now); },
     clockText(b) {
-      if (b.status === "RELIEF") return "→ NGO relief";
+      if (b.status === "RELIEF" || b.status === "SOLD_OUT") return "—";
       const s = this.secs(b);
       if (s <= 0) return "Expired";
       const toRelief = Math.max(0, b.clock.seconds_to_relief - (this.now - this.fetchedAt) / 1000);
-      return toRelief > 0 ? `${FFA.fmt.dur(toRelief)} on sale` : `${FFA.fmt.dur(s)} to expiry`;
+      return toRelief > 0 ? `On sale for ${FFA.fmt.dur(toRelief)}` : `${FFA.fmt.dur(s)} left`;
     },
     clockTone(b) {
       const s = this.secs(b);
@@ -228,22 +229,24 @@ function darkstorePage() {
       catch (e) { FFA.toast(e.message, "err"); }
       finally { this.busy = false; }
     },
-    sweep(force) {
-      this.act(() => FFA.api("/api/v1/darkstore/sweep", { method: "POST", body: { force_cutoff: force } }),
-        (r) => `${r.to_relief} batch(es) routed to NGOs · ${r.expired_batches} expired`);
+    isLead() { return FFA.user()?.role === "admin"; },
+    closeNight() {
+      if (!confirm("Close for the night? Everything still on sale will stop selling and be offered free to NGOs.")) return;
+      this.act(() => FFA.api("/api/v1/darkstore/sweep", { method: "POST", body: { force_cutoff: true } }),
+        (r) => r.to_relief ? `Closed. ${r.to_relief} dish${r.to_relief === 1 ? " is" : "es are"} now offered to NGOs.` : "Closed. There was nothing left to give away.");
     },
     excursion(zone) {
       const q = this.storeId ? `?store_id=${this.storeId}` : "";
       this.act(() => FFA.api(`/api/v1/darkstore/telemetry/excursion${q}`, { method: "POST", body: { zone, minutes: 3 } }),
-        (r) => r.message + ": affected batches have shortened safety clocks");
+        (r) => `${r.message}. Food in that unit now has less time left.`);
     },
     receive(b) {
       this.act(() => FFA.api(`/api/v1/darkstore/batches/${b.id}/receive`, { method: "POST", body: { entry_temp_c: this.entryTemps[b.id] } }),
-        (r) => r.status === "AVAILABLE" ? `${r.dish_name} checked in · ${r.haccp.tag}` : `${r.dish_name} ${r.status.toLowerCase()}: ${r.status_note}`);
+        (r) => r.status === "AVAILABLE" ? `${r.dish_name} checked in and on sale` : `${r.dish_name}: ${r.status_note}`);
     },
     discard(b) {
-      if (!confirm(`Discard ${b.available_qty} servings of ${b.dish_name}? This cannot be undone.`)) return;
-      this.act(() => FFA.api(`/api/v1/darkstore/batches/${b.id}/discard`, { method: "POST" }), `${b.dish_name} discarded`);
+      if (!confirm(`Throw away ${b.available_qty} servings of ${b.dish_name}? This can't be undone.`)) return;
+      this.act(() => FFA.api(`/api/v1/darkstore/batches/${b.id}/discard`, { method: "POST" }), `${b.dish_name} thrown away`);
     },
     openOverride(b) { this.ov = { batch: b, expires_at: b.clock.expires_at.slice(0, 16), reason: "" }; },
     saveOverride() {
@@ -252,7 +255,7 @@ function darkstorePage() {
         const r = await FFA.api(`/api/v1/darkstore/batches/${b.id}/shelf-life`, { method: "POST", body: { expires_at: this.ov.expires_at, reason: this.ov.reason } });
         this.ov.batch = null;
         return r;
-      }, (r) => `${r.dish_name} now expires ${FFA.fmt.time(r.clock.expires_at)}`);
+      }, (r) => `${r.dish_name} is now safe until ${FFA.fmt.time(r.clock.expires_at)}`);
     },
     drawTelemetry() {
       const P = FFA.palette;
@@ -265,7 +268,7 @@ function darkstorePage() {
           data: {
             labels: pts.map((p) => FFA.fmt.time(p.t)),
             datasets: [
-              { label: "Temperature °C", data: pts.map((p) => p.c), borderColor: color, backgroundColor: color + "22", fill: true,
+              { label: "Temperature (°C)", data: pts.map((p) => p.c), borderColor: color, backgroundColor: color + "22", fill: true,
                 pointRadius: pts.map((p) => (p.ok ? 0 : 3)), pointBackgroundColor: P.bad },
               { label: z.key === "HOT" ? "Min 63 °C" : "Max 5 °C", data: pts.map(() => limit), borderColor: P.bad, borderDash: [4, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
             ],

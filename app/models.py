@@ -218,5 +218,6 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[int] = mapped_column(primary_key=True)
     kind: Mapped[str] = mapped_column(String(40), index=True)
-    message: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text)   # shown to hub managers, so written in plain language
+    dark_store_id: Mapped[int | None] = mapped_column(ForeignKey("dark_stores.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
