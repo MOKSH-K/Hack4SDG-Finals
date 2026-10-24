@@ -1,0 +1,301 @@
+# FoodForAll: project context
+
+Handover notes for continuing development (for people and AI agents). Last updated 2026-10-25. The latest pushed commit is `83152dd`; the local commit that removes `vercel.json` and updates the docs is waiting for the user to push (see §0).
+The README is the user-facing guide; this file covers state, decisions and next steps.
+
+---
+
+## 0. Read this first
+
+| Item | Value |
+|---|---|
+| **Project folder (the only correct one)** | `/home/rohan/Desktop/FFA/FoodForAll` |
+| Git remote | `https://github.com/Ron102008/FoodForAll.git`, branch `main` |
+| Git state | `origin/main` = `83152dd`. Local `main` has 1 newer commit ("Fix Vercel 404s: remove vercel.json rewrite; update docs": deletes `vercel.json`, updates README, adds this file). **The user must push it**; pushing triggers a Vercel production deploy. |
+| **Wrong folder: do not use** | `/home/rohan/Desktop/FoodForAll`, a clone of a *different* repo (`Hussain13620/FoodForAll`) where the app was first built by mistake. It holds a stale copy and a `.vercel/` link to the *old* Vercel project `foodforall`. The user may delete it. |
+| **Live site** | https://food-for-all-self.vercel.app (Vercel project `food-for-all`, auto-deploys from GitHub `main`); see §6 |
+| Local server | `.venv/bin/uvicorn app.main:app --port 8000`, at http://localhost:8000 |
+| Seeded login password | `foodforall2026` for every account |
+
+**Pushing to GitHub:** this agent shell has **no GitHub credentials** (no credential helper, no SSH key, no `gh`). `git push` fails here. Commit locally, then ask the user to push from VS Code (Source Control → Sync Changes), or with `git push origin main` in the VS Code terminal, which uses their GitHub login.
+
+**User preferences (standing):**
+- **No developer telemetry or jargon in the UI.** End users (customers, kitchen managers, hub managers, NGO coordinators, the operations lead) must never see internal codes, IDs, enums, hashes, model or training details, field paths or HTTP-ish errors. Use plain language. See §5.
+- **Never label data as "demo".** Seed data looks like a live service (real-sounding names, `@foodforall.in` emails, no "Demo mode" badges). The README still discloses that the data is synthetic.
+- **Theme:** white with olive and forest green (light). Colour inspiration only; layouts are our own.
+- **Kitchen managers enter no weather or calendar data.** It's all automatic.
+- **Only commit when asked.** The user handles pushes.
+
+---
+
+## 1. What the product is
+
+FoodForAll fills the late-night gap when delivery apps stop because restaurants close:
+
+1. **Plan:** an ML model forecasts each restaurant's leftovers before closing, using weather, festivals, holidays and footfall.
+2. **Collect:** restaurants send surplus to temperature-controlled **dark stores** (hubs), which check it in at a verified temperature.
+3. **Serve:** night-shift workers order from the hubs, 11 PM – 5 AM.
+4. **Share:** anything unsold 2 h before its safe time ends, or at the 3:30 AM cut-off, becomes a free donation that exactly one NGO can claim, collect and deliver.
+
+It targets SDG 2 (Zero Hunger) and SDG 12.3 (halve food waste). The location is Bengaluru, with an Asia/Kolkata timezone.
+
+---
+
+## 2. Architecture
+
+**Stack:**
+- **Backend:** Python 3.14 locally (3.12 on Vercel), FastAPI 0.162, Pydantic 2.14, SQLAlchemy 2.1 on SQLite (WAL mode).
+- **Security:** PyJWT and pwdlib (Argon2).
+- **ML:** scikit-learn 1.9.1 (RandomForest), pandas 3.1, NumPy 2.5.
+- **Frontend:** Jinja2 templates with Tailwind (Play CDN build), Alpine.js 3.14.1, Chart.js 4.4.1 and Lucide 0.468. All four are vendored in `static/vendor/`, so no CDN is needed.
+- **Fonts:** Google Fonts, falling back to system fonts offline.
+
+```
+app/
+  main.py            FastAPI app; lifespan + lazy bootstrap (create tables -> seed if empty -> load/train model);
+                     background sweep loop (every 30 s) or, when serverless, a sweep on requests
+  config.py          all settings (FFA_* env vars, see §7); SERVERLESS = bool(VERCEL env)
+  database.py        engine, SessionLocal, now() = naive local time (Asia/Kolkata), to_local_naive()
+  models.py          ORM: User, Restaurant, DarkStore, NGO, SurplusBatch, TemperatureReading, Order, OrderItem,
+                     ReliefBundle, DailySurplusLog (training data), DailyOperations, NgoDistributionLog,
+                     WeatherDay, AuditEvent (activity log, has dark_store_id)
+  schemas.py         Pydantic request models (Weather/Category literals)
+  security.py        Argon2 hashing, JWT, require_roles() (admin passes every role check)
+  ml/
+    forecaster.py    RandomForest pipeline; target = surplus per 100 diners; per-tree uncertainty;
+                     counterfactual "drivers"; rolling 4 x 14-night backtest metrics
+    synthetic.py     generative model of a restaurant night (used only by seeding)
+    calendar_data.py loads india_calendar.json (holidays + festivals 2025-2031); simulated_weather() fallback
+    india_calendar.json  GENERATED by scripts/build_calendar.py, do not hand-edit
+  services/
+    weather.py       Open-Meteo forecast (16 days) + archive backfill -> WeatherDay rows; hourly refresh;
+                     evening (6-11 PM) classification; offline seasonal fallback
+    forecasting.py   service_date(), conditions_for(db, d), rolling_footfall(), retrain(),
+                     tonight_early_warning() (cached per date + model + weather)
+    inventory.py     dispatch, receive (temperature check), place_order (atomic), override_shelf_life
+    relief.py        convert_to_relief, claim/pick_up/distribute/release (atomic conditional UPDATEs)
+    routing.py       run_sweep(): expiry -> relief/expired, cut-off, bundle expiry, order progress
+    telemetry.py     simulated sensor readings + excursion handling (minor = shorten, critical = discard)
+    safety.py        shelf-life caps, safety clock, HACCP checks (plain-language check names), store hours
+    impact.py        SDG metrics (history roll-ups + tonight's live data)
+    serializers.py   batch_out / bundle_out / order_out
+    common.py        make_code, lock_for_write (BEGIN IMMEDIATE on SQLite), audit(), haversine_km
+  routers/           auth, restaurant (+ /predict-surplus, /weather, /restaurant/outlook, /ml/*),
+                     darkstore, store, ngo, analytics (+ /impact/summary), pages (HTML routes + role guard)
+api/index.py         serverless entry point (imports app.main:app); Vercel's FastAPI preset may use it or app/main.py directly
+templates/           base.html (theme tokens, role-aware nav), index, login, store, restaurant, darkstore, ngo, analytics
+static/js/app.js     FFA helpers: api() with friendly errors, auth/guard, toast, fmt (incl. clock12),
+                     words{} plain-language label maps, safety() summary, icon renderer, chart theme, NAV_BY_ROLE
+seed_data.py         7 restaurants, 3 dark stores, 4 NGOs, 23 users, 365 nights of history (real archive weather),
+                     a live "tonight" scenario, per-hub activity log. `python seed_data.py --reset` wipes and reseeds
+scripts/build_calendar.py  regenerates the 2025-2031 holiday/festival calendar from the `holidays` package
+tests/               33 pytest tests (conftest sets FFA_WEATHER_PROVIDER=offline, isolated temp DB)
+.vercelignore, .python-version (3.12)   Vercel config. There is deliberately NO vercel.json (see §6)
+PROJECT_CONTEXT.md   this file
+```
+
+**Pages and roles:**
+
+| Path | Who | Notes |
+|---|---|---|
+| `/` | public | landing page, live impact tickers, "One night, four hand-offs" |
+| `/login` | public | sign-in, night-worker sign-up, Quick sign-in list |
+| `/store` | public menu, ordering needs `worker` | Night Store |
+| `/restaurant` | `restaurant` | 7-night outlook, forecast, closing log, send leftovers |
+| `/darkstore` | `darkstore` | temperatures, check-in, inventory, donations, activity log |
+| `/ngo` | `ngo` | early warning + map, claim/collect/deliver |
+| `/analytics` | public | SDG impact charts, "How accurate is our forecast?" |
+
+- **Menu by role (`NAV_BY_ROLE` in `app.js`):** visitors and workers see Night Store and SDG Impact. Restaurant, darkstore and ngo users see their own portal plus SDG Impact. Admin (the operations lead) sees all five.
+- **Admin fallbacks:** admin passes every role check. The restaurant, darkstore and ngo endpoints fall back to the first restaurant, hub or NGO for admin.
+
+**Seeded accounts** (password `foodforall2026`, all `@foodforall.in`):
+
+| Role | Accounts |
+|---|---|
+| worker | priya.sharma, plus 12 customer accounts |
+| restaurant | arvind.rao (Midnight Biryani Co.), harpreet.kaur (Tandoor Tales), deepa.kulkarni (Saffron Courtyard) |
+| darkstore | kiran.hegde (Koramangala), farhan.ali (Whitefield), sneha.iyer (HSR Layout) |
+| ngo | lakshmi.nair (Annapoorna), joseph.mathew (Shelter Bridge), ritu.bansal (Sahaya) |
+| admin | nikhil.menon (operations lead) |
+
+---
+
+## 3. Features implemented
+
+1. **Surplus forecasting.**
+   - Prediction per restaurant and dish category, with a likely range, an NGO promise (with a reserve held back), and plain-language drivers.
+   - A zero-leftover fallback, plus a warning for weather it has rarely seen (Heatwave never occurs in Bengaluru history).
+   - **Accuracy:** backtest MAE about 4.5 servings per row (ordinary 4.4, festival 4.85) against a 6.5 baseline. The oracle noise floor is about 4.1, so most remaining error is the noise built into the synthetic data.
+2. **Automatic conditions.**
+   - Live weather from Open-Meteo, refreshed hourly in the background, 16 days ahead.
+   - A seasonal estimate beyond that range or when offline.
+   - Holidays and festivals for 2025–2031. A 7-night outlook on the restaurant hub.
+3. **Night Store.**
+   - Diet filters, sorting, popularity badges and scarcity alerts.
+   - Atomic checkout: a multi-line order fully succeeds or fully fails, with no overselling (tested with 25 concurrent buyers).
+   - Order tracking that advances by time: Placed 0 → Packed 2 → On the way 5 → Delivered 15 min.
+4. **Dark store.**
+   - Telemetry charts and capacity.
+   - Check-in with a temperature gate (hot ≥ 63 °C, chilled ≤ 5 °C); otherwise the batch is "Turned away".
+   - Inventory with countdowns, a "Change safe time" override (it can never extend past the safety cap), and Discard.
+   - "Close for the night" forces the cut-off. Fault drills are shown to admin only.
+   - A per-hub activity log in plain language.
+5. **Food safety.**
+   - Shelf-life cap of 6 h hot and 24 h chilled.
+   - Minor excursion (chilled ≤ 10 °C, hot ≥ 50 °C): use-by becomes now + 2 h, and the batch stays verified. A critical excursion discards it.
+6. **NGO routing.**
+   - A sweep converts near-expiry or cut-off stock into ReliefBundles.
+   - NGOs get an early warning plus a schematic SVG map, and claim → pick up → deliver (logging the shelter and people fed).
+   - Release returns a claim to the pool. Concurrent claims have exactly one winner (tested).
+7. **Analytics.** Impact KPIs and SDG indices, a year timeline, weekday/weather/temperature/festival effects, NGO totals, and a plain accuracy summary with "What affects leftovers most".
+8. **Auth.** JWT bearer tokens in localStorage, with role guards on both pages and APIs. Self sign-up is for night workers only.
+9. **UX.** Light olive theme, responsive (checked at 390 px), plain language everywhere, friendly validation errors (`FIELD_LABELS` in `main.py`), role-aware nav, and Open-Meteo attribution in the footer (required by their licence).
+
+---
+
+## 4. Important decisions (and why)
+
+- **SQLite, not MongoDB.** Zero setup, and conditional `UPDATE ... WHERE available_qty >= :q` plus `BEGIN IMMEDIATE` give race-free reservations. Postgres would need only `FFA_DATABASE_URL` changed, but hasn't been tested.
+- **Naive local timestamps** (Asia/Kolkata) everywhere. The UI shows server wall-clock digits with `FFA.fmt.time(iso)` (a slice, not browser timezone conversion).
+- **"Service date":** 2 AM on the 25th belongs to the night of the 24th (`service_date() = (t - 12h).date()`).
+- **Forecasting model choices:**
+  - The target is surplus per 100 diners, so one model generalises across restaurant sizes.
+  - The `month` feature was dropped: it can't generalise from limited history.
+  - Training uses 365 nights; 90 nights left too few festival examples.
+  - Evaluation is a rolling backtest (4 × 14 nights), with ordinary and festival nights reported separately.
+- **Gemini was not used for weather.** A language model has no live weather data and can invent numbers. Open-Meteo is free with no key. Gemini could later produce plain-English NGO briefings; the user has a free AI Studio key available.
+- **Calendar generation:** generated from the `holidays` package rather than typed by hand. Lunar and Islamic dates move each year; far-future Islamic dates are marked "(estimated)". Kannada Rajyotsava, Halloween, New Year's Eve and Valentine's Day are added as fixed dates. Navratri is the 9 nights before Dussehra.
+- **Weather classification** uses the 6–11 PM window:
+  - Heatwave: day's peak ≥ 38 °C
+  - Heavy Rain: ≥ 4 mm in the evening
+  - Rain: ≥ 0.5 mm, or at least two rainy hours
+  - Cloudy: at least half the hours overcast, foggy or drizzly
+  - Clear: anything else
+- **Open-Meteo history:** the forecast endpoint only keeps about 47 past days, so older history comes from the archive endpoint (`refresh(backfill_days=…)`).
+- **Synthetic data calibration** (`synthetic.py`):
+  - Kitchens over-prepare 15–22% by habit and absorb about 60% of a weather drop; festivals add 22% over-prep.
+  - This gives realistic drivers (rain about +30%, heavy rain about +45%, Diwali about +45%).
+  - Night-to-night noise (±10% demand, ±8% footfall, ±4% prep) is intentional.
+- **Open 24×7** (`FFA_OPEN_24X7`, default on) allows ordering outside 11 PM–5 AM for daytime walkthroughs. The automatic cut-off then only fires between 03:30 and 05:00. No UI label mentions it.
+- **Minor temperature excursions keep the batch verified** (with its use-by shortened). Otherwise near-expiry food would be routed to NGOs with a failed safety tag, which is unacceptable.
+- **Admin-only drills:** fault simulation is a drill for the operations lead, not a hub-manager action.
+- **Serverless mode** (`VERCEL` env set):
+  - The database and model live in `/tmp/foodforall`.
+  - Bootstrap is lazy, on the first request, behind a lock.
+  - The sweep runs on requests rather than in a background loop.
+
+---
+
+## 5. Plain-language rules (enforce in all future UI work)
+
+- **Never render** `code` fields (B-/REL-/ORD- codes are fine in the API but not in the UI, except the customer's order number), `haccp.tag`, raw `status` enums, numeric IDs, emails in logs, model or training stats, or field paths.
+- **Use the shared helpers:**
+  - `FFA.words.batch[status]`, `FFA.words.donation[status]`, `FFA.words.storage[...]`, `FFA.words.diet[...]`
+  - `FFA.safety(batch)` → `{ok, text}`
+  - `FFA.fmt.clock12("23:00")` → "11 PM"
+- **Server text that reaches the UI must be plain sentences:** `HTTPException` details, `status_note`, `ReliefBundle.reason`, `audit(...)` messages (always pass `dark_store_id`), forecaster `warnings` and driver `text`.
+- **Audit checker:** a headless-Chrome scan was used to audit every page and role. The script lived in the session scratchpad and isn't in the repo. To recreate it: drive Chrome via CDP (`google-chrome --headless=new --remote-debugging-port`), log in by setting `localStorage.ffa_token` / `ffa_user`, load each page, and grep `document.body.innerText` plus `[title]` attributes for codes and jargon. After the cleanup it reported 0 flagged lines across 13 page/role combinations.
+
+---
+
+## 6. Deployment (Vercel)
+
+**Current setup:**
+
+| Item | Value |
+|---|---|
+| Vercel project | **`food-for-all`** in team `food-wise` ("FoodWise", Hobby plan), created by the user and **connected to GitHub `Ron102008/FoodForAll`**. Every push to `main` deploys to production automatically. |
+| Production URL | https://food-for-all-self.vercel.app (aliases: `food-for-all-food-wise.vercel.app`, `food-for-all-git-main-food-wise.vercel.app`) |
+| Framework preset | **FastAPI** (auto-detected): one Python 3.12 function (`λ fastapi`), install `pip install -r requirements.txt`, region `iad1` |
+| Environment variables | `FFA_JWT_SECRET` (Secret, Production), set by the agent on 2026-10-25. It takes effect from the next deploy. |
+| Config files | `.python-version` (3.12) and `.vercelignore` (excludes `.venv`, `data`, `tests`, `requirements-dev.txt`, `.env*`, `.vercel`). **No `vercel.json`.** |
+
+**The 404 bug, and its fix (fixed in code, not yet deployed):**
+- **Symptom:** the deployment of `83152dd` returns FastAPI's `{"detail":"Not Found"}` on every path. The app itself boots (the first request took about 41 s for seeding and training).
+- **Cause:** the build log says *"Internal rewrites in backend framework projects now route requests using the rewritten destination path."* Our old `vercel.json` rewrote `/(.*)` → `/api/index`, so FastAPI received `/api/index` for every request, and no route matches that.
+- **Fix:** `vercel.json` is deleted in the local commit. The FastAPI preset already routes every path to the app, and the old `functions` block (maxDuration, includeFiles) doesn't apply to the preset. The cold start of about 41 s completes within the default limit.
+- **After the user pushes:** confirm that `/`, `/login`, `/store`, `/restaurant`, `/darkstore`, `/ngo`, `/analytics`, `/static/js/app.js` and `/api/v1/store/menu` return 200. Confirm that source files (`/README.md`, `/app/config.py`, `/PROJECT_CONTEXT.md`, `/.env.local`) still return 404. Sign in as a seeded account and open each role's page. If anything still 404s, the entrypoint Vercel picked may differ: it may use `api/index.py` (which imports `app.main:app`) or another candidate. Check with `vercel inspect <deployment-url> --logs --scope food-wise`.
+
+**The old project:** `foodforall` (https://foodforall-ten.vercel.app, also `foodforall-food-wise.vercel.app`) was created by the agent with CLI deploys, is linked only from the wrong folder, still runs very old code and 404s. Suggest the user deletes it (`vercel project rm foodforall --scope food-wise`), **only with their confirmation**.
+
+**CLI access:**
+- Vercel CLI 65.2.0 is at `~/.local/node/bin/vercel` (Node 22.20.0 in `~/.local/node`; not on PATH by default). It was logged in as `rohannaikstudent-3204`.
+- The correct folder isn't linked. Pass `--project food-for-all --scope food-wise` explicitly, or run `vercel link --project food-for-all --scope food-wise`. That creates `.vercel/` and `.env.local` (an OIDC token), which are git- and vercel-ignored and must never be committed.
+- Useful commands: `vercel inspect <url> --logs --scope food-wise` (build log), `vercel logs <url> --scope food-wise` (runtime logs, JSON lines), `vercel env ls --project food-for-all --scope food-wise`.
+- **Don't deploy from the CLI without asking.** The user deploys by pushing to GitHub; they once stopped an agent redeploy.
+
+**Serverless caveats (explain these to the user when relevant):**
+- **Data doesn't persist.** SQLite in `/tmp/foodforall` is per instance and resets on cold start, and parallel instances can disagree. Real persistence needs hosted Postgres (Neon, Supabase or Vercel Postgres) via `FFA_DATABASE_URL` (untested).
+- **Cold starts are slow (about 41 s).** First boot seeds 365 nights, makes an Open-Meteo call, and trains 5 RandomForests (4 backtest plus 1 final). Options: ship a pre-trained model, skip the backtest when `SERVERLESS`, or seed fewer nights when serverless.
+- **Size:** dependencies are about 265 MB; Vercel's build "optimizes dependencies", installing large ones at runtime into `/tmp/_vc_deps`.
+- **No background loop.** The sweep runs on requests (at most every 30 s); the weather refresh is rate-limited to hourly.
+- **Alternative:** Render or Railway would run it as a normal server (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`) with a persistent disk, which fits this app better.
+
+---
+
+## 7. Environment and configuration
+
+**Local setup.** `python3-venv` isn't installed on this machine, so use `virtualenv`:
+
+```bash
+cd /home/rohan/Desktop/FFA/FoodForAll
+virtualenv .venv && .venv/bin/pip install -r requirements-dev.txt   # dev = runtime + uvicorn[standard], pytest, httpx, holidays
+.venv/bin/uvicorn app.main:app --reload                            # http://localhost:8000
+.venv/bin/python -m pytest -q                                      # 33 tests, about 25 s
+.venv/bin/python seed_data.py --reset                              # wipe + reseed (or: rm -rf data/)
+.venv/bin/python scripts/build_calendar.py                         # regenerate the calendar
+```
+
+- **Schema changes:** delete `data/`, because `create_all` doesn't migrate (there's no Alembic).
+- **`requirements.txt`** is runtime only (what Vercel installs). **`requirements-dev.txt`** adds the test and calendar tools.
+
+**Environment variables** (all optional):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FFA_DATABASE_URL` | `sqlite:///data/foodforall.db` (`/tmp/foodforall/…` on Vercel) | database |
+| `FFA_DATA_DIR` | `data/` or `/tmp/foodforall` | DB and model location |
+| `FFA_MODEL_PATH` | `<data>/surplus_model.joblib` | saved model |
+| `FFA_JWT_SECRET` | random per process | **must be set in production** |
+| `FFA_JWT_TTL_MINUTES` | 720 | login lifetime |
+| `FFA_TIMEZONE` | Asia/Kolkata | all timestamps |
+| `FFA_OPEN_24X7` | 1 | order outside 11 PM–5 AM; cut-off only 03:30–05:00 |
+| `FFA_RELIEF_LEAD_HOURS` | 2 | hours before expiry that food goes to NGOs |
+| `FFA_SWEEP_INTERVAL` | 30 | seconds between sweeps |
+| `FFA_WEATHER_PROVIDER` | open-meteo | `offline` = no network (tests use this) |
+| `FFA_WEATHER_LAT` / `FFA_WEATHER_LNG` | 12.9716 / 77.5946 | Bengaluru |
+| `FFA_WEATHER_REFRESH_MINUTES` | 60 | weather refresh |
+| `FFA_WEATHER_TIMEOUT` | 8 | seconds |
+| `VERCEL` | (set by Vercel) | turns on serverless mode |
+
+**Network:** Open-Meteo (`api.open-meteo.com`, `archive-api.open-meteo.com`) needs no key. Google Fonts is optional. There are no other external services.
+
+**Machine:** Ubuntu with Python 3.14.4, `google-chrome` at `/usr/bin/google-chrome` (used for headless UI checks) and Firefox. There's no system Node; Node is in `~/.local/node`.
+
+---
+
+## 8. Pending tasks
+
+1. **Push and verify the deploy.** The user pushes the local commit; then verify the live site as listed in §6. If it works, tell the user, and mention the cold-start and persistence caveats.
+2. **Decide on persistence and cold start** for the live site, with the user: hosted Postgres, a pre-trained model, or skipping the backtest when serverless.
+3. **Clean-up (ask first):** delete the old Vercel project `foodforall`; delete the wrong folder `/home/rohan/Desktop/FoodForAll`; remove the stray root `__pycache__/` (it's ignored).
+4. **Optional Gemini integration** (the user has a free Google AI Studio key): plain-English nightly briefings for NGOs or kitchen managers. Read the key from an env var such as `GEMINI_API_KEY` (set it in Vercel too), never commit it, and keep model and jargon wording out of the UI.
+5. **Heatwave:** there were 0 heatwave nights in the year of Bengaluru history (≥ 38 °C never occurs), so the forecast warns on heatwave nights. Consider a lower city-specific threshold, or accept the warning.
+6. **Nice to have:** Alembic migrations, a compiled Tailwind build (instead of the Play CDN script), real map tiles, and per-restaurant weather (currently city-level).
+
+Done recently: the README walkthrough and architecture are updated to the current UI (no more "Simulate…" buttons, model card or HACCP tags), and a deployment section was added.
+
+---
+
+## 9. Quick verification after a restart
+
+```bash
+cd /home/rohan/Desktop/FFA/FoodForAll
+git status -sb && git log --oneline -3                      # expect main in sync with origin once the user has pushed
+.venv/bin/python -m pytest -q -p no:cacheprovider           # expect 33 passed
+.venv/bin/uvicorn app.main:app --port 8000 &                # first boot: weather refresh + training, about 20 s
+curl -s localhost:8000/api/v1/ml/model-info | head -c 300   # expect rows 12775 and backtest metrics
+~/.local/node/bin/vercel whoami                             # Vercel login status
+for p in / /store /analytics /api/v1/store/menu; do curl -s -o /dev/null -w "$p %{http_code}\n" --max-time 90 https://food-for-all-self.vercel.app$p; done   # expect 200s after the push
+```
