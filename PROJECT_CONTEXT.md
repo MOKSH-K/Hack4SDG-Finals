@@ -1,6 +1,6 @@
 # FoodForAll: project context
 
-Handover notes for continuing development (for people and AI agents). Last updated 2026-10-25. Pushed and live: `0254e12` (Vercel 404 fix). The favicon commit is local, waiting for the user to push (see §0).
+Handover notes for continuing development (for people and AI agents). Last updated 2026-10-25. Pushed: `0254e12` (Vercel 404 fix, verified live) and `81e58d9` (favicon set). The header-logo commit is local, waiting for the user to push (see §0).
 The README is the user-facing guide; this file covers state, decisions and next steps.
 
 ---
@@ -11,7 +11,7 @@ The README is the user-facing guide; this file covers state, decisions and next 
 |---|---|
 | **Project folder (the only correct one)** | `/home/rohan/Desktop/FFA/FoodForAll` |
 | Git remote | `https://github.com/Ron102008/FoodForAll.git`, branch `main` |
-| Git state | `origin/main` = `0254e12` ("Fix Vercel 404s…", deployed and verified live). Local `main` has 1 newer commit, "Add FoodForAll favicon set" (icons, root icon routes, time-of-day test fix). **The user must push it**; pushing triggers a Vercel production deploy. |
+| Git state | `origin/main` = `81e58d9` ("Add FoodForAll favicon set"). Local `main` has 1 newer commit, "Use the favicon as the header logo". **The user must push it**; pushing triggers a Vercel production deploy. |
 | **Wrong folder: do not use** | `/home/rohan/Desktop/FoodForAll`, a clone of a *different* repo (`Hussain13620/FoodForAll`) where the app was first built by mistake. It holds a stale copy and a `.vercel/` link to the *old* Vercel project `foodforall`. The user may delete it. |
 | **Live site** | https://food-for-all-self.vercel.app (Vercel project `food-for-all`, auto-deploys from GitHub `main`); see §6 |
 | Local server | `.venv/bin/uvicorn app.main:app --port 8000`, at http://localhost:8000 |
@@ -154,7 +154,7 @@ PROJECT_CONTEXT.md   this file
    - Release returns a claim to the pool. Concurrent claims have exactly one winner (tested).
 7. **Analytics.** Impact KPIs and SDG indices, a year timeline, weekday/weather/temperature/festival effects, NGO totals, and a plain accuracy summary with "What affects leftovers most".
 8. **Auth.** JWT bearer tokens in localStorage, with role guards on both pages and APIs. Self sign-up is for night workers only.
-9. **UX.** A relevant favicon (a cream bowl with steam under an amber crescent moon on forest green) with the full icon set and web manifest ("Add to home screen"). Light olive theme, responsive (checked at 390 px), plain language everywhere, friendly validation errors (`FIELD_LABELS` in `main.py`), role-aware nav, and Open-Meteo attribution in the footer (required by their licence).
+9. **UX.** A relevant favicon (a cream bowl with steam under an amber crescent moon on forest green), also used as the header logo (`templates/base.html` loads `/static/icons/favicon.svg`), with the full icon set and web manifest ("Add to home screen"). Light olive theme, responsive (checked at 390 px), plain language everywhere, friendly validation errors (`FIELD_LABELS` in `main.py`), role-aware nav, and Open-Meteo attribution in the footer (required by their licence).
 
 ---
 
@@ -283,7 +283,7 @@ virtualenv .venv && .venv/bin/pip install -r requirements-dev.txt   # dev = runt
 
 ## 8. Pending tasks
 
-1. **Push the favicon commit and verify the deploy.** The user pushes; then check that `/favicon.ico` returns 200 on the live site and re-run the §6 checks. The 404 fix is already live.
+1. **Verify the latest deploy.** After the user pushes, check that `/favicon.ico` returns 200 on the live site, that the header shows the bowl-and-moon logo, and re-run the §6 checks. The 404 fix is already live.
 2. **Decide on persistence and cold start** for the live site, with the user: hosted Postgres, a pre-trained model, or skipping the backtest when serverless.
 3. **Clean-up (ask first):** delete the old Vercel project `foodforall`; delete the wrong folder `/home/rohan/Desktop/FoodForAll`; remove the stray root `__pycache__/` (it's ignored).
 4. **Optional Gemini integration** (the user has a free Google AI Studio key): plain-English nightly briefings for NGOs or kitchen managers. Read the key from an env var such as `GEMINI_API_KEY` (set it in Vercel too), never commit it, and keep model and jargon wording out of the UI.
