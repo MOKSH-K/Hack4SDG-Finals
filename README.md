@@ -7,7 +7,7 @@
 **When the city's kitchens close, FoodForAll opens.**
 A late-night food platform that serves restaurant surplus to night-shift workers and routes every unsold meal to NGOs and shelters, before it's unsafe.
 
-[🌐 Live Demo](https://food-for-all-frk.vercel.app/) · [🎥 Video Walkthrough](#) · [📂 Repository](https://github.com/Ron102008/FoodForAll)
+[🌐 Live Demo](https://food-for-all-frk.vercel.app/) · [📂 Repository](https://github.com/Ron102008/FoodForAll)
 
 ![SDG 2](https://img.shields.io/badge/SDG%202-Zero%20Hunger-355e3b) ![SDG 12.3](https://img.shields.io/badge/SDG%2012.3-Halve%20Food%20Waste-9a6212) ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E?logo=scikitlearn&logoColor=white)
 
