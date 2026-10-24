@@ -270,8 +270,9 @@ def test_weather_refresh_stores_live_nights(monkeypatch):
     with SessionLocal() as db:
         assert weather.refresh(db, force=True) == 2
         assert weather.conditions(db, date(2026, 10, 21))["weather_condition"] == "Heavy Rain"
-        assert weather.conditions(db, date(2026, 10, 20)) | {"updated_at": None} == {
-            "weather_condition": "Clear", "temperature": 22.0, "source": "live", "updated_at": None}
+        clear = weather.conditions(db, date(2026, 10, 20))
+        assert (clear["weather_condition"], clear["temperature"], clear["source"]) == ("Clear", 22.0, "live")
+        assert weather.conditions(db, date(2026, 10, 21))["evening_rain_mm"] == 12.0
 
 
 def test_weather_falls_back_when_api_down(monkeypatch, client):
@@ -286,3 +287,29 @@ def test_weather_falls_back_when_api_down(monkeypatch, client):
         assert weather.refresh(db, force=True) == 0
     r = client.get("/api/v1/weather?on=2027-03-01").json()
     assert r["source"] == "estimate" and r["weather_condition"]
+
+
+def test_prediction_fills_weather_automatically(client):
+    r = client.post("/api/v1/predict-surplus", json={"date": "2026-11-08", "restaurant_id": 1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["weather"]["weather_condition"] and body["weather"]["overridden"] is False
+    assert body["inputs"]["festival_name"] and "Diwali" in body["inputs"]["festival_name"]
+
+
+def test_outlook_lists_upcoming_nights(client, auth):
+    r = client.get("/api/v1/restaurant/outlook?days=7", headers=auth("restaurant"))
+    assert r.status_code == 200, r.text
+    nights = r.json()["nights"]
+    assert len(nights) == 7
+    assert all({"weather_condition", "temperature", "predicted_surplus", "holiday", "festival"} <= n.keys() for n in nights)
+
+
+def test_calendar_covers_next_five_years():
+    from datetime import date
+    from app.ml.calendar_data import CALENDAR_RANGE, FESTIVALS, HOLIDAYS
+    assert CALENDAR_RANGE == (date(2026, 1, 1), date(2031, 12, 31))
+    for year in range(2026, 2032):
+        assert HOLIDAYS[date(year, 1, 26)] == "Republic Day"
+        assert any("Diwali" in n for d, n in FESTIVALS.items() if d.year == year)
+        assert any("Holi" in n for d, n in HOLIDAYS.items() if d.year == year)

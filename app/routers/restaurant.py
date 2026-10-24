@@ -1,7 +1,7 @@
 """Module A: partner hotel operations and the surplus prediction API."""
-from datetime import date
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.ml.synthetic import CATEGORIES
 from app.models import DailySurplusLog, DarkStore, Restaurant, SurplusBatch, User
 from app.schemas import DailyLogIn, DispatchIn, PredictIn
 from app.security import require_roles
+from app.services import weather
 from app.services.forecasting import conditions_for, retrain, rolling_footfall, service_date
 from app.services.inventory import dispatch_batch
 from app.services.serializers import batch_out
@@ -37,8 +38,11 @@ def predict_surplus(body: PredictIn, db: Session = Depends(get_db)):
         footfall = rolling_footfall(db, r, body.date) if r else 300
     holiday = holiday_name(body.date)
     festival = festival_name(body.date)
+    auto = weather.conditions(db, body.date)
+    weather_condition = body.weather_condition or auto["weather_condition"]
+    temperature = body.temperature if body.temperature is not None else auto["temperature"]
     result = forecaster.predict(
-        on=body.date, weather_condition=body.weather_condition, temperature=body.temperature,
+        on=body.date, weather_condition=weather_condition, temperature=temperature,
         is_holiday=bool(holiday) if body.is_holiday is None else body.is_holiday,
         is_festival=bool(festival) if body.is_festival is None else body.is_festival,
         historical_avg_footfall=footfall,
@@ -50,8 +54,10 @@ def predict_surplus(body: PredictIn, db: Session = Depends(get_db)):
             d["text"] = d["text"].replace("Festival over-prep", f"{festival} festival over-prep")
         if d["factor"] == "Public holiday" and holiday:
             d["text"] = d["text"].replace("Public holiday", f"{holiday} public holiday")
-    return {**result, "inputs": {**body.model_dump(mode="json"), "historical_avg_footfall": footfall,
+    return {**result, "inputs": {**body.model_dump(mode="json"), "weather_condition": weather_condition,
+                                 "temperature": temperature, "historical_avg_footfall": footfall,
                                  "holiday_name": holiday, "festival_name": festival},
+            "weather": {**auto, "overridden": body.weather_condition is not None or body.temperature is not None},
             "model": {"trained_at": forecaster.meta.get("trained_at"), "metrics": forecaster.meta.get("metrics")}}
 
 
@@ -60,6 +66,28 @@ def weather_for(on: date | None = None, db: Session = Depends(get_db)):
     """Automatic conditions for a night (defaults to tonight), used to pre-fill forecasts."""
     d = on or service_date(now())
     return {"date": d.isoformat(), **conditions_for(db, d)}
+
+
+@router.get("/restaurant/outlook")
+def outlook(days: int = Query(default=7, ge=1, le=16), db: Session = Depends(get_db),
+            user: User = Depends(require_roles("restaurant"))):
+    """The next `days` nights: automatic weather + calendar, and the predicted surplus for each."""
+    if not forecaster.ready:
+        raise HTTPException(503, "Model is still training - try again in a few seconds")
+    r = _my_restaurant(db, user)
+    start = service_date(now())
+    footfall = rolling_footfall(db, r, start)
+    nights = []
+    for i in range(days):
+        d = start + timedelta(days=i)
+        cond = conditions_for(db, d)
+        p = forecaster.predict(on=d, weather_condition=cond["weather_condition"], temperature=cond["temperature"],
+                               is_holiday=bool(cond["holiday"]), is_festival=bool(cond["festival"]),
+                               historical_avg_footfall=footfall)
+        nights.append({"date": d.isoformat(), **cond, "predicted_surplus": p["predicted_surplus_servings"],
+                       "interval_80": p["interval_80"], "zero_surplus": p["zero_surplus"],
+                       "ngo_prenotification_qty": p["ngo_prenotification_qty"]})
+    return {"restaurant_id": r.id, "nights": nights, "weather_updated_at": nights[0]["updated_at"] if nights else None}
 
 
 @router.get("/ml/model-info")

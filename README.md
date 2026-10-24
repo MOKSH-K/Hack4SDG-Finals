@@ -142,7 +142,7 @@ Interactive API docs: **http://localhost:8000/docs**.
   - Weather the model has barely seen (for example Heatwave, absent from Aug–Oct history) comes with a low-confidence warning.
 
 ### Automated weather
-- **Source:** [Open-Meteo](https://open-meteo.com/). It's free, needs no API key, and its licence requires the attribution shown in the footer.
+- **Source:** [Open-Meteo](https://open-meteo.com/) (forecast up to 16 days ahead). It's free, needs no API key, and its licence requires the attribution shown in the footer.
 - **Refresh:** a background job pulls the forecast for the city about once an hour (`app/services/weather.py`). Each night is condensed into one condition from the 6–11 PM window, when diners decide whether to go out:
 
   | Condition | Rule |
@@ -153,9 +153,15 @@ Interactive API docs: **http://localhost:8000/docs**.
   | Cloudy | mostly overcast, foggy or drizzly hours |
   | Clear | anything else |
 
-- **Used automatically by:** tonight's conditions, the NGO early warning, restaurant closing logs and the forecast form (which a manager can still override for what-if checks).
+- **Used automatically by:** the restaurant forecast and its 7-night outlook, the NGO early warning, and restaurant closing logs. Kitchen managers never enter weather. The prediction API still accepts optional `weather_condition`/`temperature` overrides for what-if checks.
 - **Seeding:** the 90-night history uses real past weather from Open-Meteo's archive endpoint.
 - **Fallback:** if the API is unreachable, the app uses cached data, then a seasonal estimate. Set `FFA_WEATHER_PROVIDER=offline` to never call the network (the tests do this).
+
+### Holiday and festival calendar (2026–2031)
+- **Data file:** `app/ml/india_calendar.json` holds public holidays (national plus Karnataka) and festivals for 2026–2031. The forecaster uses both automatically.
+- **Generation:** it's built by `scripts/build_calendar.py` from the maintained [`holidays`](https://pypi.org/project/holidays/) package, which computes lunar and Islamic dates, plus a few fixed dates (Kannada Rajyotsava, Halloween, New Year's Eve, Valentine's Day). Navratri is derived as the nine nights before Dussehra.
+- **Uncertain dates:** far-future Islamic dates are marked "(estimated)" because they depend on moon sighting.
+- **Extending:** to cover more years, edit `LAST_YEAR` and run `.venv/bin/python scripts/build_calendar.py` (needs `requirements-dev.txt`).
 
 ### Atomic reservations (Modules B and C)
 - **Checkout:** each line is a conditional `UPDATE … SET available_qty = available_qty - :q WHERE available_qty >= :q AND status = 'AVAILABLE' AND expires_at > now`. If any line matches 0 rows, the whole order rolls back. On SQLite, writes run inside `BEGIN IMMEDIATE`.
@@ -217,7 +223,7 @@ Both conversion factors are stated assumptions; edit them in `app/config.py`.
 
 - **Data:** all seeded data (partners, accounts, orders and history) is synthetic and fictional, though nothing in the UI labels it so. It is produced by an explicit generative model (`app/ml/synthetic.py`). The ML pipeline is real and will retrain on real closing logs: every restaurant log is stored and used by `POST /api/v1/ml/retrain`.
 - **Weather:** real (Open-Meteo), with an offline seasonal estimate only as a fallback.
-- **Calendar:** lunar-calendar festival dates for 2026–27 are approximate.
+- **Calendar:** generated from the `holidays` package; far-future Islamic dates are estimates.
 - **Sensors:** temperature readings are simulated.
 - **Map:** the NGO map is schematic (no tile server), so the app stays offline.
 - **Fonts:** load from Google Fonts when online and fall back to system fonts when offline.

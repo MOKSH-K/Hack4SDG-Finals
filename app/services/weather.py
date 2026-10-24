@@ -1,6 +1,6 @@
 """Automated weather: Open-Meteo forecast + history, refreshed in the background.
 
-The forecast endpoint covers roughly the last 6 weeks and the next 7 days; older nights (used to
+The forecast endpoint covers roughly the last 6 weeks and the next 16 days; older nights (used to
 seed training history) come from Open-Meteo's historical archive. Hourly data is condensed into one
 row per night. Nights are classified from the 6-11 PM window - the hours when diners decide
 whether to go out - plus the day's peak temperature for heatwaves. If the API is unreachable we
@@ -28,6 +28,7 @@ log = logging.getLogger("foodforall.weather")
 
 API_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+FORECAST_DAYS = 16   # Open-Meteo maximum
 EVENING_HOURS = range(18, 24)
 RAIN_CODES = set(range(61, 68)) | set(range(80, 83)) | set(range(95, 100))   # rain, showers, thunderstorms
 OVERCAST_CODES = {3, 45, 48} | set(range(51, 58))                             # overcast, fog, drizzle
@@ -88,7 +89,7 @@ def _get(url: str, **extra) -> dict:
 
 
 def _fetch() -> dict:
-    return _get(API_URL, past_days=92, forecast_days=7)
+    return _get(API_URL, past_days=92, forecast_days=FORECAST_DAYS)
 
 
 def _fetch_archive(start: date, end: date) -> dict:
@@ -136,10 +137,12 @@ def conditions(db: Session, d: date) -> dict:
     """Weather for the night of `d`: live/cached API data when we have it, else the seasonal estimate."""
     row = db.get(WeatherDay, d)
     if row:
-        return {"weather_condition": row.condition, "temperature": row.temperature, "source": "live",
+        return {"weather_condition": row.condition, "temperature": row.temperature, "temp_max": row.temp_max,
+                "evening_rain_mm": row.evening_precip_mm, "source": "live",
                 "updated_at": row.fetched_at.isoformat() if row.fetched_at else None}
     cond, temp = simulated_weather(d)
-    return {"weather_condition": cond, "temperature": temp, "source": "estimate", "updated_at": None}
+    return {"weather_condition": cond, "temperature": temp, "temp_max": None, "evening_rain_mm": None,
+            "source": "estimate", "updated_at": None}
 
 
 def last_updated(db: Session) -> datetime | None:

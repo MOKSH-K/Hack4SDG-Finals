@@ -40,8 +40,9 @@ class TokenOut(BaseModel):
 
 class PredictIn(BaseModel):
     date: date
-    weather_condition: Weather
-    temperature: float = Field(ge=-10, le=55)
+    # Omit weather to use the automatic forecast (Open-Meteo, or the seasonal estimate beyond its range).
+    weather_condition: Weather | None = None
+    temperature: float | None = Field(default=None, ge=-10, le=55)
     is_holiday: bool | None = None       # None -> look up the holiday calendar
     is_festival: bool | None = None      # None -> look up the festival calendar
     historical_avg_footfall: int | None = Field(default=None, ge=10, le=10000)

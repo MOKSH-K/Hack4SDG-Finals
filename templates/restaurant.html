@@ -20,47 +20,46 @@
 
   <div class="grid gap-6 xl:grid-cols-[1.05fr_1fr]">
     <!-- ML forecast -->
-    <section class="card">
-      <div class="flex items-center gap-2">
+    <section class="card min-w-0">
+      <div class="flex flex-wrap items-center gap-2">
         <i data-lucide="brain-circuit" class="h-5 w-5 text-sky2"></i>
         <h2 class="card-title">Surplus forecast</h2>
+        <span class="ml-auto text-xs text-ink-dim" x-show="weatherUpdated()" x-text="'Weather updated ' + weatherUpdated()"></span>
       </div>
-      <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="forecast()">
-        <div><label class="label" for="fdate">Date</label><input id="fdate" type="date" class="input" x-model="p.date" @change="loadWeather()"></div>
-        <div>
-          <label class="label" for="ftemp">Temperature <span class="normal-case text-ink" x-text="p.temperature + ' °C'"></span></label>
-          <input id="ftemp" type="range" min="15" max="44" step="0.5" class="mt-2 w-full" x-model.number="p.temperature" @change="forecast()">
+
+      <!-- 7-night outlook: weather + calendar are automatic -->
+      <div class="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1" role="listbox" aria-label="Next 7 nights">
+        <template x-for="n in outlook" :key="n.date">
+          <button type="button" role="option" :aria-selected="p.date === n.date" @click="pick(n.date)"
+                  class="flex min-w-[5.6rem] flex-1 flex-col items-center rounded-xl border px-2 py-2.5 text-center transition"
+                  :class="p.date === n.date ? 'border-rescue bg-rescue text-white' : 'border-night-600 bg-white hover:border-olive'">
+            <span class="text-[11px] font-semibold uppercase tracking-wide" :class="p.date === n.date ? 'text-white/80' : 'text-ink-dim'" x-text="dayLabel(n.date)"></span>
+            <span class="mt-1 text-xl leading-none" x-text="wx(n.weather_condition)" :title="n.weather_condition"></span>
+            <span class="mt-1 text-xs tabular-nums" :class="p.date === n.date ? 'text-white/90' : 'text-ink-muted'"
+                  x-text="Math.round(n.temperature) + '°' + (n.evening_rain_mm ? ' · ' + n.evening_rain_mm + 'mm' : '')"></span>
+            <span class="mt-1.5 font-display text-lg font-bold tabular-nums" x-text="n.zero_surplus ? '0' : n.predicted_surplus"></span>
+            <span class="text-[10px]" :class="p.date === n.date ? 'text-white/80' : 'text-ink-dim'">surplus</span>
+            <span class="mt-1 h-1.5 w-1.5 rounded-full" :class="n.festival ? 'bg-moon' : (n.holiday ? 'bg-violet-500' : 'bg-transparent')" :title="n.festival || n.holiday || ''"></span>
+          </button>
+        </template>
+        <template x-if="!outlook.length"><div class="py-6 text-sm text-ink-muted">Loading the week ahead…</div></template>
+      </div>
+
+      <!-- Selected night: automatic conditions -->
+      <div class="mt-4 rounded-xl border border-night-600 bg-night-900/60 p-3" x-show="f.weather">
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="font-semibold" x-text="longDay(p.date)"></span>
+          <span class="chip bg-sky2/10 text-sky2"><span x-text="wx(f.weather?.weather_condition)"></span><span x-text="f.weather?.weather_condition"></span></span>
+          <span class="chip bg-white text-ink-muted ring-1 ring-night-600" x-text="(f.weather?.temperature ?? '–') + ' °C evening'"></span>
+          <template x-if="f.weather?.evening_rain_mm"><span class="chip bg-white text-ink-muted ring-1 ring-night-600" x-text="f.weather.evening_rain_mm + ' mm rain, 6–11 PM'"></span></template>
+          <template x-if="f.inputs?.festival_name"><span class="chip bg-moon/10 text-moon"><i data-lucide="party-popper" class="h-3 w-3"></i><span x-text="f.inputs.festival_name"></span></span></template>
+          <template x-if="f.inputs?.holiday_name"><span class="chip bg-violet-500/10 text-violet-700"><i data-lucide="calendar-days" class="h-3 w-3"></i><span x-text="f.inputs.holiday_name"></span></span></template>
         </div>
-        <div class="sm:col-span-2">
-          <span class="label">Weather <span class="ml-1 normal-case tracking-normal text-ink-dim" x-text="weatherNote()"></span></span>
-          <div class="flex flex-wrap gap-2">
-            <template x-for="w in weathers" :key="w.v">
-              <button type="button" class="seg flex items-center gap-1.5" :class="p.weather_condition === w.v && 'seg-on'" @click="p.weather_condition = w.v; forecast()">
-                <span x-text="w.icon"></span><span x-text="w.v"></span>
-              </button>
-            </template>
-          </div>
-        </div>
-        <div>
-          <span class="label">Festival</span>
-          <div class="flex gap-2">
-            <template x-for="opt in tri" :key="opt.label">
-              <button type="button" class="seg" :class="p.is_festival === opt.v && 'seg-on'" @click="p.is_festival = opt.v; forecast()" x-text="opt.label"></button>
-            </template>
-          </div>
-        </div>
-        <div>
-          <span class="label">Public holiday</span>
-          <div class="flex gap-2">
-            <template x-for="opt in tri" :key="opt.label">
-              <button type="button" class="seg" :class="p.is_holiday === opt.v && 'seg-on'" @click="p.is_holiday = opt.v; forecast()" x-text="opt.label"></button>
-            </template>
-          </div>
-        </div>
-        <div>
-          <label class="label" for="fff">Avg footfall (blank = 28-night history)</label>
-          <input id="fff" type="number" min="10" class="input" x-model="p.footfall" placeholder="auto" @change="forecast()">
-        </div>
+        <p class="mt-1.5 text-xs text-ink-dim" x-text="f.weather?.source === 'live' ? 'Weather from the live forecast · holidays and festivals from the 2026–2031 calendar' : 'Beyond the 16-day forecast, so weather is a seasonal estimate · holidays and festivals from the 2026–2031 calendar'"></p>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div><label class="label" for="fdate">Another date</label><input id="fdate" type="date" class="input" x-model="p.date" min="2026-01-01" max="2031-12-31" @change="forecast()"></div>
         <div>
           <label class="label" for="fcat">Dish category</label>
           <select id="fcat" class="input" x-model="p.dish_category" @change="forecast()">
@@ -68,7 +67,7 @@
             <template x-for="c in o.categories || []" :key="c"><option :value="c" x-text="c"></option></template>
           </select>
         </div>
-      </form>
+      </div>
 
       <template x-if="f.predicted_surplus_servings !== undefined">
         <div class="mt-6">
@@ -226,25 +225,23 @@ const localInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.g
 
 function restaurantPage() {
   return {
-    o: {}, f: {}, w: {}, busy: false,
-    weathers: [{ v: "Clear", icon: "☀️" }, { v: "Cloudy", icon: "☁️" }, { v: "Rain", icon: "🌧️" }, { v: "Heavy Rain", icon: "⛈️" }, { v: "Heatwave", icon: "🔥" }],
-    tri: [{ label: "Auto", v: null }, { label: "Yes", v: true }, { label: "No", v: false }],
+    o: {}, f: {}, outlook: [], busy: false,
     allergenList: ["Gluten", "Dairy", "Nuts", "Peanuts", "Egg", "Fish", "Shellfish", "Soy", "Sesame", "Mustard"],
-    p: { date: "", weather_condition: "Clear", temperature: 28, is_festival: null, is_holiday: null, footfall: "", dish_category: "" },
+    p: { date: "", dish_category: "" },
     log: { closing_time: "23:00", actual_footfall: 300, entries: [] },
     d: { dish_name: "", dish_category: "Biryani & Rice", diet: "VEG", allergens: [], storage: "HOT", cooked_at: localInput(new Date(Date.now() - 30 * 60000)), shelf_life_hours: 5, quantity: 20, price: 80, dark_store_id: null },
 
     async init() {
       await this.load();
-      const c = this.o.tonight_conditions;
-      Object.assign(this.p, { date: this.o.service_date, weather_condition: c.weather_condition, temperature: c.temperature });
-      this.w = { source: c.source, auto: { weather_condition: c.weather_condition, temperature: c.temperature } };
+      this.p.date = this.o.service_date;
       this.log.closing_time = this.o.restaurant.closing_time;
       this.log.actual_footfall = this.o.restaurant.avg_footfall;
       this.log.entries = this.o.categories.map((c) => ({ dish_category: c, prep_count: 0, sold_count: 0 }));
       this.d.dark_store_id = this.o.restaurant.dark_store_id;
       this.forecast();
+      this.loadOutlook();
       setInterval(() => !document.hidden && this.load(), 20000);
+      setInterval(() => !document.hidden && this.loadOutlook(), 10 * 60000);
     },
     async load() {
       try {
@@ -252,28 +249,30 @@ function restaurantPage() {
         this.drawHistory();
       } catch (e) { FFA.toast(e.message, "err"); }
     },
-    // Weather is filled in automatically from the live forecast; the toggles are only for what-if overrides.
-    async loadWeather() {
-      try {
-        const w = await FFA.api(`/api/v1/weather?on=${this.p.date}`, { auth: false });
-        Object.assign(this.p, { weather_condition: w.weather_condition, temperature: w.temperature });
-        this.w = { source: w.source, auto: { weather_condition: w.weather_condition, temperature: w.temperature } };
-      } catch (e) { FFA.toast(e.message, "err"); }
-      this.forecast();
+    // Weather and calendar come from the server (Open-Meteo + 2026-2031 calendar); nothing to enter here.
+    async loadOutlook() {
+      try { this.outlook = (await FFA.api("/api/v1/restaurant/outlook?days=7")).nights; }
+      catch (e) { FFA.toast(e.message, "err"); }
     },
-    weatherNote() {
-      if (!this.w.source) return "";
-      const overridden = this.p.weather_condition !== this.w.auto.weather_condition || this.p.temperature !== this.w.auto.temperature;
-      if (overridden) return "· changed from the forecast";
-      return this.w.source === "live" ? "· auto-filled from the live forecast" : "· seasonal estimate (no live forecast for this date)";
-    },
+    pick(date) { this.p.date = date; this.forecast(); },
     async forecast() {
-      const body = { date: this.p.date, weather_condition: this.p.weather_condition, temperature: this.p.temperature,
-                     restaurant_id: this.o.restaurant.id, is_festival: this.p.is_festival, is_holiday: this.p.is_holiday };
-      if (this.p.footfall) body.historical_avg_footfall = Number(this.p.footfall);
+      if (!this.p.date) return;
+      const body = { date: this.p.date, restaurant_id: this.o.restaurant.id };
       if (this.p.dish_category) body.dish_category = this.p.dish_category;
       try { this.f = await FFA.api("/api/v1/predict-surplus", { method: "POST", body }); }
       catch (e) { FFA.toast(e.message, "err"); }
+    },
+    wx(c) { return { Clear: "☀️", Cloudy: "☁️", Rain: "🌧️", "Heavy Rain": "⛈️", Heatwave: "🔥" }[c] || ""; },
+    dayLabel(iso) {
+      if (iso === this.o.service_date) return "Tonight";
+      return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric" });
+    },
+    longDay(iso) {
+      return iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }) : "";
+    },
+    weatherUpdated() {
+      const u = this.outlook[0]?.updated_at;
+      return u ? FFA.fmt.time(u) : "";
     },
     async saveLog() {
       this.busy = true;
