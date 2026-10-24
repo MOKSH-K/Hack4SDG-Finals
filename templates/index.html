@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="landing()" x-init="init()">
+  <!-- Hero -->
+  <section class="grid items-center gap-10 py-6 lg:grid-cols-[1.15fr_1fr]">
+    <div>
+      <div class="mb-5 flex flex-wrap gap-2">
+        <span class="chip border border-rescue/40 bg-rescue/10 text-rescue"><i data-lucide="utensils" class="h-3.5 w-3.5"></i>SDG 2 · Zero Hunger</span>
+        <span class="chip border border-moon/40 bg-moon/10 text-moon"><i data-lucide="recycle" class="h-3.5 w-3.5"></i>SDG 12.3 · Halve Food Waste</span>
+      </div>
+      <h1 class="font-display text-4xl font-bold leading-tight sm:text-5xl">
+        When the city's kitchens close,<br><span class="text-rescue">FoodForAll opens.</span>
+      </h1>
+      <p class="mt-5 max-w-xl text-lg text-ink-muted">
+        Delivery apps go dark when restaurants shut. We collect their surplus cooked food into temperature-controlled
+        <strong class="text-ink">dark stores</strong>, serve it to <strong class="text-ink">night-shift workers</strong> until 5 AM,
+        and route every unsold meal to <strong class="text-ink">NGOs and shelters</strong> before it is unsafe. Nothing reaches a landfill.
+      </p>
+      <div class="mt-8 grid gap-3 sm:grid-cols-2">
+        <a href="/store" class="group card flex items-center gap-4 border-moon/40 p-4 transition hover:border-moon hover:bg-night-700">
+          <span class="grid h-12 w-12 place-items-center rounded-xl bg-moon/15 text-moon"><i data-lucide="moon" class="h-6 w-6"></i></span>
+          <span><span class="block font-semibold">I work the night shift</span><span class="text-sm text-ink-muted">Order a hot meal, 11 PM – 5 AM</span></span>
+          <i data-lucide="arrow-right" class="ml-auto h-5 w-5 text-ink-dim transition group-hover:translate-x-1 group-hover:text-moon"></i>
+        </a>
+        <a href="/login" class="group card flex items-center gap-4 border-rescue/40 p-4 transition hover:border-rescue hover:bg-night-700">
+          <span class="grid h-12 w-12 place-items-center rounded-xl bg-rescue/15 text-rescue"><i data-lucide="hand-heart" class="h-6 w-6"></i></span>
+          <span><span class="block font-semibold">Hotel, Dark Store or NGO</span><span class="text-sm text-ink-muted">Partner sign-in</span></span>
+          <i data-lucide="arrow-right" class="ml-auto h-5 w-5 text-ink-dim transition group-hover:translate-x-1 group-hover:text-rescue"></i>
+        </a>
+      </div>
+    </div>
+
+    <!-- Live tickers -->
+    <div class="card relative overflow-hidden">
+      <div class="mb-4 flex items-center gap-2 text-sm text-ink-muted">
+        <span class="live-dot inline-block h-2 w-2 rounded-full bg-rescue text-rescue"></span> Live impact · updates every few seconds
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <template x-for="t in tickers" :key="t.key">
+          <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
+            <div class="text-xs uppercase tracking-wide text-ink-dim" x-text="t.label"></div>
+            <div class="kpi mt-1" :class="flash[t.key] && 'tick-pulse'">
+              <span x-text="t.prefix || ''"></span><span x-text="FFA.fmt.n(Math.round(shown[t.key] || 0))"></span><span class="ml-1 text-base font-medium text-ink-muted" x-text="t.unit"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="mt-5 grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="mb-1 flex justify-between"><span class="text-ink-muted">SDG 12 diversion index</span><span class="font-semibold tabular-nums" x-text="(s.sdg12_index ?? 0) + '%'"></span></div>
+          <div class="h-2 rounded-full bg-night-700"><div class="h-2 rounded-full bg-olive transition-all duration-700" :style="`width:${s.sdg12_index||0}%`"></div></div>
+        </div>
+        <div>
+          <div class="mb-1 flex justify-between"><span class="text-ink-muted">SDG 2 relief delivery index</span><span class="font-semibold tabular-nums" x-text="(s.sdg2_index ?? 0) + '%'"></span></div>
+          <div class="h-2 rounded-full bg-night-700"><div class="h-2 rounded-full bg-rescue transition-all duration-700" :style="`width:${s.sdg2_index||0}%`"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tonight -->
+  <section class="mt-10">
+    <div class="mb-4 flex items-end justify-between">
+      <h2 class="font-display text-2xl font-semibold">Tonight, right now</h2>
+      <a href="/analytics" class="text-sm text-moon hover:underline">Full SDG analytics →</a>
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <template x-for="m in tonight()" :key="m.label">
+        <div class="card p-4">
+          <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-ink-dim"><span x-text="m.label"></span></div>
+          <div class="kpi mt-1 text-2xl" x-text="FFA.fmt.n(m.value)"></div>
+          <div class="text-xs text-ink-muted" x-text="m.hint"></div>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="mt-14">
+    <div class="mb-8 max-w-2xl">
+      <h2 class="font-display text-2xl font-semibold">One night, four hand-offs</h2>
+      <p class="mt-1 text-ink-muted">From the last order at a restaurant to a warm meal at a shelter, all before sunrise.</p>
+    </div>
+    <ol class="relative grid gap-4 md:grid-cols-4 md:gap-5">
+      <!-- connector behind the step markers (desktop) -->
+      <div class="pointer-events-none absolute left-[12%] right-[12%] top-5 hidden border-t-2 border-dashed border-night-500 md:block" aria-hidden="true"></div>
+      <template x-for="(step, i) in steps" :key="step.title">
+        <li class="relative flex flex-col">
+          <div class="relative z-10 mb-4 flex items-center gap-3 md:flex-col md:gap-2">
+            <span class="grid h-10 w-10 place-items-center rounded-full border-2 font-display text-sm font-bold"
+                  :class="step.last ? 'border-rescue bg-rescue text-white' : 'border-night-500 bg-white text-ink'" x-text="i + 1"></span>
+            <span class="chip bg-white text-ink-muted ring-1 ring-night-600" x-text="step.time"></span>
+          </div>
+          <div class="card flex flex-1 flex-col" :class="step.last && 'border-rescue/40 bg-olive-soft'">
+            <span class="grid h-11 w-11 place-items-center rounded-xl" :class="step.tone">
+              <template x-if="step.icon === 'calendar-clock'"><i data-lucide="calendar-clock" class="h-5 w-5"></i></template>
+              <template x-if="step.icon === 'truck'"><i data-lucide="truck" class="h-5 w-5"></i></template>
+              <template x-if="step.icon === 'utensils'"><i data-lucide="utensils" class="h-5 w-5"></i></template>
+              <template x-if="step.icon === 'hand-heart'"><i data-lucide="hand-heart" class="h-5 w-5"></i></template>
+            </span>
+            <h3 class="mt-4 font-display text-lg font-semibold" x-text="step.title"></h3>
+            <p class="mt-1 text-sm leading-relaxed text-ink-muted" x-text="step.text"></p>
+            <div class="mt-auto flex items-center gap-2 border-t border-night-600 pt-3 text-xs font-medium text-ink-muted" :class="step.last ? 'mt-5 border-rescue/20 text-rescue' : 'mt-5'">
+              <i data-lucide="users" class="h-3.5 w-3.5"></i><span x-text="step.who"></span>
+            </div>
+          </div>
+        </li>
+      </template>
+    </ol>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function landing() {
+  return {
+    s: {},
+    shown: {},
+    flash: {},
+    tickers: [
+      { key: "meals_saved_kg", label: "Food rescued", unit: "kg" },
+      { key: "co2e_prevented_kg", label: "CO₂e prevented", unit: "kg" },
+      { key: "night_workers_served", label: "Night-worker orders", unit: "" },
+      { key: "people_fed", label: "People fed via NGOs", unit: "" },
+      { key: "meals_saved_servings", label: "Meals saved", unit: "" },
+      { key: "active_dark_stores", label: "Active dark stores", unit: "" },
+    ],
+    steps: [
+      { title: "Plan ahead", time: "Around 8 PM", icon: "calendar-clock", tone: "bg-sky2/10 text-sky2", who: "Restaurants & NGOs",
+        text: "Before closing, we estimate how much food each restaurant will have left, so shelters know what to expect tonight." },
+      { title: "Collect", time: "10 – 11:30 PM", icon: "truck", tone: "bg-moon/10 text-moon", who: "Restaurants & dark stores",
+        text: "Leftover meals are packed and driven to a nearby dark store, where they're kept piping hot or properly chilled." },
+      { title: "Serve", time: "11 PM – 5 AM", icon: "utensils", tone: "bg-olive-soft text-olive", who: "Night-shift workers",
+        text: "Nurses, call-centre teams and security staff order a fresh meal at a fair price, long after other apps have gone quiet." },
+      { title: "Share", time: "By 3:30 AM", icon: "hand-heart", tone: "bg-rescue text-white", who: "NGOs & shelters", last: true,
+        text: "Every meal that isn't sold goes free to verified NGOs and shelters, while it's still fresh and safe to eat." },
+    ],
+    tonight() {
+      const t = this.s.tonight || {};
+      return [
+        { label: "Servings in hubs", value: t.received, hint: "checked in at dark stores" },
+        { label: "Sold to workers", value: t.sold, hint: `${FFA.fmt.n(t.orders)} orders` },
+        { label: "In relief pipeline", value: t.in_relief_pipeline, hint: "flagged / claimed / in transit" },
+        { label: "Donated", value: t.donated, hint: "servings distributed" },
+        { label: "People fed", value: t.people_fed, hint: "at shelters tonight" },
+      ];
+    },
+    init() { FFA.poll(() => this.load(), 8000); },
+    async load() {
+      try {
+        const s = await FFA.api("/api/v1/impact/summary", { auth: false });
+        for (const t of this.tickers) {
+          const from = this.shown[t.key] ?? 0, to = s[t.key] ?? 0;
+          if (from !== to && this.s[t.key] !== undefined) {
+            this.flash[t.key] = true;
+            setTimeout(() => (this.flash[t.key] = false), 1200);
+          }
+          this.animate(t.key, from, to);
+        }
+        this.s = s;
+      } catch (e) { /* landing stays usable without metrics */ }
+    },
+    animate(key, from, to) {
+      const start = performance.now(), dur = 900;
+      const step = (now) => {
+        const p = Math.min(1, (now - start) / dur);
+        this.shown[key] = from + (to - from) * (1 - Math.pow(1 - p, 3));
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    },
+  };
+}
+</script>
+{% endblock %}

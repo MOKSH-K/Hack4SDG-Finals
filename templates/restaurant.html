@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block head %}<script src="/static/vendor/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div x-data="restaurantPage()" x-init="init()" x-cloak>
+  <header class="mb-6 flex flex-wrap items-end gap-4">
+    <div>
+      <p class="text-sm text-ink-muted">Restaurant Operations Hub</p>
+      <h1 class="font-display text-3xl font-bold" x-text="o.restaurant?.name || 'Loading…'"></h1>
+      <p class="text-sm text-ink-muted" x-show="o.restaurant">
+        <span x-text="o.restaurant?.area"></span> · closes <span x-text="o.restaurant?.closing_time"></span> ·
+        28-night avg footfall <span class="tabular-nums" x-text="FFA.fmt.n(o.restaurant?.avg_footfall)"></span>
+      </p>
+    </div>
+    <div class="ml-auto flex flex-wrap gap-2 text-sm" x-show="o.tonight_conditions">
+      <span class="chip bg-sky2/15 text-sky2"><i data-lucide="cloud-sun" class="h-3.5 w-3.5"></i><span x-text="`Tonight: ${o.tonight_conditions?.weather_condition}, ${o.tonight_conditions?.temperature} °C`"></span><template x-if="o.tonight_conditions?.source === 'live'"><span class="ml-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide"><span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-sky2 text-sky2"></span>Live</span></template></span>
+      <template x-if="o.tonight_conditions?.festival"><span class="chip bg-moon/15 text-moon"><i data-lucide="party-popper" class="h-3.5 w-3.5"></i><span x-text="o.tonight_conditions.festival"></span></span></template>
+      <template x-if="o.tonight_conditions?.holiday"><span class="chip bg-violet-500/10 text-violet-700"><i data-lucide="calendar-days" class="h-3.5 w-3.5"></i><span x-text="o.tonight_conditions.holiday"></span></span></template>
+    </div>
+  </header>
+
+  <div class="grid gap-6 xl:grid-cols-[1.05fr_1fr]">
+    <!-- ML forecast -->
+    <section class="card">
+      <div class="flex items-center gap-2">
+        <i data-lucide="brain-circuit" class="h-5 w-5 text-sky2"></i>
+        <h2 class="card-title">Surplus forecast</h2>
+      </div>
+      <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="forecast()">
+        <div><label class="label" for="fdate">Date</label><input id="fdate" type="date" class="input" x-model="p.date" @change="loadWeather()"></div>
+        <div>
+          <label class="label" for="ftemp">Temperature <span class="normal-case text-ink" x-text="p.temperature + ' °C'"></span></label>
+          <input id="ftemp" type="range" min="15" max="44" step="0.5" class="mt-2 w-full" x-model.number="p.temperature" @change="forecast()">
+        </div>
+        <div class="sm:col-span-2">
+          <span class="label">Weather <span class="ml-1 normal-case tracking-normal text-ink-dim" x-text="weatherNote()"></span></span>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="w in weathers" :key="w.v">
+              <button type="button" class="seg flex items-center gap-1.5" :class="p.weather_condition === w.v && 'seg-on'" @click="p.weather_condition = w.v; forecast()">
+                <span x-text="w.icon"></span><span x-text="w.v"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+        <div>
+          <span class="label">Festival</span>
+          <div class="flex gap-2">
+            <template x-for="opt in tri" :key="opt.label">
+              <button type="button" class="seg" :class="p.is_festival === opt.v && 'seg-on'" @click="p.is_festival = opt.v; forecast()" x-text="opt.label"></button>
+            </template>
+          </div>
+        </div>
+        <div>
+          <span class="label">Public holiday</span>
+          <div class="flex gap-2">
+            <template x-for="opt in tri" :key="opt.label">
+              <button type="button" class="seg" :class="p.is_holiday === opt.v && 'seg-on'" @click="p.is_holiday = opt.v; forecast()" x-text="opt.label"></button>
+            </template>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="fff">Avg footfall (blank = 28-night history)</label>
+          <input id="fff" type="number" min="10" class="input" x-model="p.footfall" placeholder="auto" @change="forecast()">
+        </div>
+        <div>
+          <label class="label" for="fcat">Dish category</label>
+          <select id="fcat" class="input" x-model="p.dish_category" @change="forecast()">
+            <option value="">All categories</option>
+            <template x-for="c in o.categories || []" :key="c"><option :value="c" x-text="c"></option></template>
+          </select>
+        </div>
+      </form>
+
+      <template x-if="f.predicted_surplus_servings !== undefined">
+        <div class="mt-6">
+          <template x-if="f.zero_surplus">
+            <div class="rounded-xl border border-rescue/40 bg-rescue/10 p-4 text-sm">
+              <div class="flex items-center gap-2 font-semibold text-rescue"><i data-lucide="circle-check" class="h-4 w-4"></i>Zero-surplus night expected</div>
+              <p class="mt-1 text-ink-muted" x-text="f.message"></p>
+            </div>
+          </template>
+          <div class="grid gap-3 sm:grid-cols-3" x-show="!f.zero_surplus">
+            <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
+              <div class="text-xs uppercase tracking-wide text-ink-dim">Predicted surplus</div>
+              <div class="kpi" x-text="FFA.fmt.n(f.predicted_surplus_servings)"></div>
+              <div class="text-xs text-ink-muted" x-text="`80% range ${f.interval_80[0]}–${f.interval_80[1]} servings`"></div>
+            </div>
+            <div class="rounded-xl border border-rescue/40 bg-rescue/5 p-4">
+              <div class="text-xs uppercase tracking-wide text-ink-dim">NGO pre-notification</div>
+              <div class="kpi text-rescue" x-text="FFA.fmt.n(f.ngo_prenotification_qty)"></div>
+              <div class="text-xs text-ink-muted">servings promised early</div>
+            </div>
+            <div class="rounded-xl border border-night-600 bg-night-900/60 p-4">
+              <div class="text-xs uppercase tracking-wide text-ink-dim">Safety buffer</div>
+              <div class="kpi" x-text="f.safety_margin_pct + '%'"></div>
+              <div class="text-xs text-ink-muted">held back for model uncertainty</div>
+            </div>
+          </div>
+          <template x-for="w in f.warnings" :key="w">
+            <div class="mt-3 flex gap-2 rounded-xl border border-moon/40 bg-moon/10 p-3 text-sm text-moon"><i data-lucide="triangle-alert" class="mt-0.5 h-4 w-4"></i><span x-text="w"></span></div>
+          </template>
+          <div class="mt-5 grid gap-5 md:grid-cols-2">
+            <div>
+              <h3 class="mb-2 text-sm font-semibold">Why: driving factors</h3>
+              <template x-if="!f.drivers.length"><p class="text-sm text-ink-muted">A typical night: no unusual drivers.</p></template>
+              <ul class="space-y-2">
+                <template x-for="d in f.drivers" :key="d.factor">
+                  <li class="text-sm">
+                    <div class="flex justify-between gap-2"><span x-text="d.text"></span><span class="shrink-0 tabular-nums" :class="d.delta_servings >= 0 ? 'text-moon' : 'text-sky2'" x-text="(d.delta_servings >= 0 ? '+' : '') + Math.round(d.delta_servings)"></span></div>
+                    <div class="mt-1 h-1.5 rounded-full bg-night-700"><div class="h-1.5 rounded-full" :class="d.delta_servings >= 0 ? 'bg-moon' : 'bg-sky2'" :style="`width:${Math.min(100, Math.abs(d.pct))}%`"></div></div>
+                  </li>
+                </template>
+              </ul>
+            </div>
+            <div>
+              <h3 class="mb-2 text-sm font-semibold">By dish category</h3>
+              <ul class="space-y-1.5 text-sm">
+                <template x-for="b in f.breakdown" :key="b.dish_category">
+                  <li class="flex justify-between gap-2"><span class="text-ink-muted" x-text="b.dish_category"></span><span class="tabular-nums"><span x-text="b.predicted_servings"></span> <span class="text-xs text-ink-dim" x-text="`(${b.low}–${b.high})`"></span></span></li>
+                </template>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- Tonight's log -->
+    <section class="card">
+      <div class="flex items-center gap-2">
+        <i data-lucide="chef-hat" class="h-5 w-5 text-moon"></i>
+        <h2 class="card-title">Closing log: prep vs sales</h2>
+        <span class="ml-auto chip" :class="o.logged_tonight ? 'bg-rescue/15 text-rescue' : 'bg-night-700 text-ink-muted'" x-text="o.logged_tonight ? 'Logged tonight' : 'Not logged yet'"></span>
+      </div>
+      <form class="mt-4 space-y-4" @submit.prevent="saveLog()">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="ct">Closing time</label><input id="ct" type="time" class="input" x-model="log.closing_time" required></div>
+          <div><label class="label" for="aff">Diners tonight</label><input id="aff" type="number" min="0" class="input" x-model.number="log.actual_footfall" required></div>
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr><th class="table-head pb-2">Category</th><th class="table-head pb-2">Prepared</th><th class="table-head pb-2">Sold</th><th class="table-head pb-2 text-right">Unsold</th></tr></thead>
+          <tbody>
+            <template x-for="e in log.entries" :key="e.dish_category">
+              <tr>
+                <td class="py-1 pr-2" x-text="e.dish_category"></td>
+                <td class="py-1 pr-2"><input type="number" min="0" class="input py-1" x-model.number="e.prep_count" :aria-label="e.dish_category + ' prepared'"></td>
+                <td class="py-1 pr-2"><input type="number" min="0" class="input py-1" x-model.number="e.sold_count" :aria-label="e.dish_category + ' sold'"></td>
+                <td class="py-1 text-right font-semibold tabular-nums" :class="e.prep_count - e.sold_count < 0 ? 'text-alert' : 'text-moon'" x-text="e.prep_count - e.sold_count"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="btn-moon" :disabled="busy">Save closing log</button>
+          <button type="button" class="btn-ghost" @click="zeroSurplus()" :disabled="busy"><i data-lucide="circle-check" class="h-4 w-4"></i>Nothing left tonight</button>
+          <span class="ml-auto text-sm text-ink-muted">Unsold: <strong class="text-ink tabular-nums" x-text="log.entries.reduce((s, e) => s + Math.max(0, e.prep_count - e.sold_count), 0)"></strong> servings</span>
+        </div>
+      </form>
+      <div class="mt-6 h-56"><canvas id="historyChart" aria-label="Prepared, sold and surplus servings over the last 14 nights" role="img"></canvas></div>
+    </section>
+  </div>
+
+  <!-- Dispatch -->
+  <section class="card mt-6">
+    <div class="flex items-center gap-2">
+      <i data-lucide="truck" class="h-5 w-5 text-rescue"></i>
+      <h2 class="card-title">Dispatch surplus to a dark store</h2>
+    </div>
+    <form class="mt-4 grid gap-4 md:grid-cols-4" @submit.prevent="dispatch()">
+      <div class="md:col-span-2"><label class="label" for="dn">Dish name</label><input id="dn" class="input" x-model="d.dish_name" required minlength="2" placeholder="e.g. Chicken Dum Biryani"></div>
+      <div><label class="label" for="dc">Category</label>
+        <select id="dc" class="input" x-model="d.dish_category"><template x-for="c in o.categories || []" :key="c"><option :value="c" x-text="c"></option></template></select></div>
+      <div><label class="label" for="dd">Diet</label>
+        <select id="dd" class="input" x-model="d.diet"><option value="VEG">Veg</option><option value="NON_VEG">Non-veg</option><option value="VEGAN">Vegan</option></select></div>
+      <div class="md:col-span-4">
+        <span class="label">Allergens (FSSAI declaration)</span>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="a in allergenList" :key="a">
+            <button type="button" class="seg py-1" :class="d.allergens.includes(a) && 'seg-on'" @click="toggleAllergen(a)" x-text="a"></button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <span class="label">Storage</span>
+        <div class="flex gap-2">
+          <button type="button" class="seg flex-1" :class="d.storage === 'HOT' && 'seg-on'" @click="d.storage = 'HOT'">Hot ≥63 °C</button>
+          <button type="button" class="seg flex-1" :class="d.storage === 'CHILLED' && 'seg-on'" @click="d.storage = 'CHILLED'">Chilled ≤5 °C</button>
+        </div>
+      </div>
+      <div><label class="label" for="dck">Cooked at</label><input id="dck" type="datetime-local" class="input" x-model="d.cooked_at" required></div>
+      <div><label class="label" for="dsl">Shelf life (hours)</label><input id="dsl" type="number" step="0.5" min="0.5" max="48" class="input" x-model.number="d.shelf_life_hours" required></div>
+      <div><label class="label" for="dq">Servings</label><input id="dq" type="number" min="1" max="500" class="input" x-model.number="d.quantity" required></div>
+      <div><label class="label" for="dp">Price per serving (₹)</label><input id="dp" type="number" min="0" class="input" x-model.number="d.price"></div>
+      <div><label class="label" for="dds">Dark store</label>
+        <select id="dds" class="input" x-model.number="d.dark_store_id"><template x-for="s in o.dark_stores || []" :key="s.id"><option :value="s.id" x-text="s.name" :selected="s.id === d.dark_store_id"></option></template></select></div>
+      <div class="flex flex-col justify-end md:col-span-2">
+        <p class="mb-2 text-xs" :class="expiryPreview().capped ? 'text-moon' : 'text-ink-muted'" x-text="expiryPreview().text"></p>
+        <button class="btn-primary" :disabled="busy"><i data-lucide="send" class="h-4 w-4"></i>Dispatch batch</button>
+      </div>
+    </form>
+
+    <div class="mt-6 overflow-x-auto">
+      <table class="w-full min-w-[720px] text-sm">
+        <thead><tr class="border-b border-night-600"><th class="table-head py-2">Batch</th><th class="table-head">Dish</th><th class="table-head">Qty</th><th class="table-head">Status</th><th class="table-head">Expires</th><th class="table-head">HACCP</th></tr></thead>
+        <tbody class="divide-y divide-night-700">
+          <template x-for="b in o.dispatches || []" :key="b.id">
+            <tr>
+              <td class="py-2 font-mono text-xs text-ink-muted" x-text="b.code"></td>
+              <td><span x-text="b.dish_name"></span><span class="block text-xs text-ink-dim" x-text="b.status_note"></span></td>
+              <td class="tabular-nums" x-text="`${b.sold_qty} sold / ${b.initial_qty}`"></td>
+              <td><span class="chip" :class="statusTone(b.status)" x-text="FFA.fmt.label(b.status)"></span></td>
+              <td class="tabular-nums" x-text="FFA.fmt.time(b.clock.expires_at)"></td>
+              <td class="font-mono text-xs" :class="b.haccp.verified ? 'text-rescue' : 'text-ink-dim'" x-text="b.haccp.verified ? b.haccp.tag : 'pending'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const pad = (n) => String(n).padStart(2, "0");
+const localInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+function restaurantPage() {
+  return {
+    o: {}, f: {}, w: {}, busy: false,
+    weathers: [{ v: "Clear", icon: "☀️" }, { v: "Cloudy", icon: "☁️" }, { v: "Rain", icon: "🌧️" }, { v: "Heavy Rain", icon: "⛈️" }, { v: "Heatwave", icon: "🔥" }],
+    tri: [{ label: "Auto", v: null }, { label: "Yes", v: true }, { label: "No", v: false }],
+    allergenList: ["Gluten", "Dairy", "Nuts", "Peanuts", "Egg", "Fish", "Shellfish", "Soy", "Sesame", "Mustard"],
+    p: { date: "", weather_condition: "Clear", temperature: 28, is_festival: null, is_holiday: null, footfall: "", dish_category: "" },
+    log: { closing_time: "23:00", actual_footfall: 300, entries: [] },
+    d: { dish_name: "", dish_category: "Biryani & Rice", diet: "VEG", allergens: [], storage: "HOT", cooked_at: localInput(new Date(Date.now() - 30 * 60000)), shelf_life_hours: 5, quantity: 20, price: 80, dark_store_id: null },
+
+    async init() {
+      await this.load();
+      const c = this.o.tonight_conditions;
+      Object.assign(this.p, { date: this.o.service_date, weather_condition: c.weather_condition, temperature: c.temperature });
+      this.w = { source: c.source, auto: { weather_condition: c.weather_condition, temperature: c.temperature } };
+      this.log.closing_time = this.o.restaurant.closing_time;
+      this.log.actual_footfall = this.o.restaurant.avg_footfall;
+      this.log.entries = this.o.categories.map((c) => ({ dish_category: c, prep_count: 0, sold_count: 0 }));
+      this.d.dark_store_id = this.o.restaurant.dark_store_id;
+      this.forecast();
+      setInterval(() => !document.hidden && this.load(), 20000);
+    },
+    async load() {
+      try {
+        this.o = await FFA.api("/api/v1/restaurant/overview");
+        this.drawHistory();
+      } catch (e) { FFA.toast(e.message, "err"); }
+    },
+    // Weather is filled in automatically from the live forecast; the toggles are only for what-if overrides.
+    async loadWeather() {
+      try {
+        const w = await FFA.api(`/api/v1/weather?on=${this.p.date}`, { auth: false });
+        Object.assign(this.p, { weather_condition: w.weather_condition, temperature: w.temperature });
+        this.w = { source: w.source, auto: { weather_condition: w.weather_condition, temperature: w.temperature } };
+      } catch (e) { FFA.toast(e.message, "err"); }
+      this.forecast();
+    },
+    weatherNote() {
+      if (!this.w.source) return "";
+      const overridden = this.p.weather_condition !== this.w.auto.weather_condition || this.p.temperature !== this.w.auto.temperature;
+      if (overridden) return "· changed from the forecast";
+      return this.w.source === "live" ? "· auto-filled from the live forecast" : "· seasonal estimate (no live forecast for this date)";
+    },
+    async forecast() {
+      const body = { date: this.p.date, weather_condition: this.p.weather_condition, temperature: this.p.temperature,
+                     restaurant_id: this.o.restaurant.id, is_festival: this.p.is_festival, is_holiday: this.p.is_holiday };
+      if (this.p.footfall) body.historical_avg_footfall = Number(this.p.footfall);
+      if (this.p.dish_category) body.dish_category = this.p.dish_category;
+      try { this.f = await FFA.api("/api/v1/predict-surplus", { method: "POST", body }); }
+      catch (e) { FFA.toast(e.message, "err"); }
+    },
+    async saveLog() {
+      this.busy = true;
+      try {
+        const r = await FFA.api("/api/v1/restaurant/daily-log", { method: "POST", body: this.log });
+        FFA.toast(r.message, r.zero_surplus ? "ok" : "warn");
+        await this.load();
+      } catch (e) { FFA.toast(e.message, "err"); } finally { this.busy = false; }
+    },
+    zeroSurplus() {
+      this.log.entries.forEach((e) => (e.sold_count = e.prep_count));
+      this.saveLog();
+    },
+    toggleAllergen(a) {
+      this.d.allergens = this.d.allergens.includes(a) ? this.d.allergens.filter((x) => x !== a) : [...this.d.allergens, a];
+    },
+    expiryPreview() {
+      const cap = this.d.storage === "HOT" ? 6 : 24;
+      const hours = Math.min(this.d.shelf_life_hours || 0, cap);
+      const exp = new Date(new Date(this.d.cooked_at).getTime() + hours * 3600000);
+      if (isNaN(exp)) return { text: "", capped: false };
+      const capped = this.d.shelf_life_hours > cap;
+      return { capped, text: `Safe until ${pad(exp.getHours())}:${pad(exp.getMinutes())}` +
+        (capped ? ` (capped at ${cap} h for ${this.d.storage.toLowerCase()} storage)` : "") + ". Routed to NGOs 2 h before." };
+    },
+    async dispatch() {
+      this.busy = true;
+      try {
+        const b = await FFA.api("/api/v1/restaurant/dispatch", { method: "POST", body: this.d });
+        FFA.toast(`${b.code} dispatched: ${b.initial_qty} × ${b.dish_name}`);
+        this.d.dish_name = ""; this.d.allergens = [];
+        await this.load();
+      } catch (e) { FFA.toast(e.message, "err"); } finally { this.busy = false; }
+    },
+    statusTone(s) {
+      return { INCOMING: "bg-sky2/15 text-sky2", AVAILABLE: "bg-rescue/15 text-rescue", SOLD_OUT: "bg-night-600 text-ink",
+               RELIEF: "bg-moon/15 text-moon", EXPIRED: "bg-alert/15 text-alert", DISCARDED: "bg-alert/15 text-alert",
+               REJECTED: "bg-alert/15 text-alert" }[s] || "bg-night-700 text-ink-muted";
+    },
+    drawHistory() {
+      const h = this.o.history || [];
+      const P = FFA.palette;
+      FFA.chart("historyChart", {
+        type: "bar",
+        data: {
+          labels: h.map((r) => FFA.fmt.dateShort(r.date)),
+          datasets: [
+            { label: "Sold", data: h.map((r) => r.sold), backgroundColor: P.blue, stack: "s" },
+            { label: "Surplus", data: h.map((r) => r.surplus), backgroundColor: P.orange, stack: "s" },
+          ],
+        },
+        options: {
+          interaction: { mode: "index", intersect: false },
+          plugins: { title: { display: true, text: "Last 14 nights: servings prepared (sold + surplus)", color: P.text, align: "start" } },
+          scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true } },
+          datasets: { bar: { borderColor: P.surface, borderWidth: { top: 2 } } },
+        },
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[1fr_1.1fr]" x-data="loginPage()">
+  <div class="card">
+    <div class="mb-5 flex gap-2">
+      <button class="seg" :class="mode==='login' && 'seg-on'" @click="mode='login'">Sign in</button>
+      <button class="seg" :class="mode==='register' && 'seg-on'" @click="mode='register'">Night-worker sign-up</button>
+    </div>
+
+    <form x-show="mode==='login'" @submit.prevent="login()" class="space-y-4">
+      <div><label class="label" for="email">Email</label><input id="email" class="input" type="email" x-model="email" autocomplete="username" required></div>
+      <div><label class="label" for="pw">Password</label><input id="pw" class="input" type="password" x-model="password" autocomplete="current-password" required></div>
+      <button class="btn-primary w-full" :disabled="busy"><i data-lucide="log-in" class="h-4 w-4"></i><span x-text="busy ? 'Signing in…' : 'Sign in'"></span></button>
+    </form>
+
+    <form x-show="mode==='register'" x-cloak @submit.prevent="register()" class="space-y-4">
+      <div><label class="label" for="rname">Your name</label><input id="rname" class="input" x-model="name" placeholder="e.g. Ananya (ICU night nurse)" required minlength="2"></div>
+      <div><label class="label" for="remail">Email</label><input id="remail" class="input" type="email" x-model="email" required></div>
+      <div><label class="label" for="rpw">Password (min 8 characters)</label><input id="rpw" class="input" type="password" x-model="password" minlength="8" required autocomplete="new-password"></div>
+      <button class="btn-moon w-full" :disabled="busy">Create account &amp; order</button>
+      <p class="text-xs text-ink-dim">Hotels, dark stores and NGOs are verified and onboarded by the FoodForAll team.</p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Quick sign-in</h2>
+    <p class="mt-1 text-sm text-ink-muted">Choose an account to fill in the form.</p>
+    <div class="mt-4 grid gap-2">
+      <template x-for="a in accounts" :key="a.email">
+        <button type="button" @click="pick(a)" class="flex items-center gap-3 rounded-xl border border-night-600 bg-night-900/60 p-3 text-left transition hover:border-moon/60 hover:bg-night-700">
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg" :class="a.tone"><span class="text-xs font-bold" x-text="a.short"></span></span>
+          <span class="min-w-0"><span class="block text-sm font-semibold" x-text="a.name"></span><span class="block truncate text-xs text-ink-muted" x-text="a.role"></span></span>
+        </button>
+      </template>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loginPage() {
+  return {
+    mode: "login", email: "", password: "", name: "", busy: false,
+    accounts: [
+      { name: "Priya Sharma", role: "Night-shift nurse · orders from the Night Store", email: "priya.sharma@foodforall.in", page: "/store", short: "PS", tone: "bg-moon/15 text-moon" },
+      { name: "Arvind Rao", role: "Kitchen manager · Midnight Biryani Co.", email: "arvind.rao@foodforall.in", page: "/restaurant", short: "AR", tone: "bg-sky2/15 text-sky2" },
+      { name: "Kiran Hegde", role: "Hub manager · Koramangala Night Hub", email: "kiran.hegde@foodforall.in", page: "/darkstore", short: "KH", tone: "bg-violet-500/10 text-violet-700" },
+      { name: "Lakshmi Nair", role: "Coordinator · Annapoorna Night Relief", email: "lakshmi.nair@foodforall.in", page: "/ngo", short: "LN", tone: "bg-rescue/15 text-rescue" },
+      { name: "Joseph Mathew", role: "Coordinator · Shelter Bridge Trust", email: "joseph.mathew@foodforall.in", page: "/ngo", short: "JM", tone: "bg-rescue/15 text-rescue" },
+      { name: "Nikhil Menon", role: "Operations lead · all portals", email: "nikhil.menon@foodforall.in", page: "/analytics", short: "NM", tone: "bg-alert/15 text-alert" },
+    ],
+    pick(a) { this.mode = "login"; this.email = a.email; this.password = "foodforall2026"; },
+    next(user) {
+      const n = new URLSearchParams(location.search).get("next");
+      return n && n.startsWith("/") && !n.startsWith("//") ? n : FFA.HOME[user.role] || "/";
+    },
+    async login() {
+      this.busy = true;
+      try {
+        const r = await FFA.api("/api/v1/auth/login", { method: "POST", body: { email: this.email, password: this.password }, auth: false });
+        FFA.signIn(r.token, r.user);
+        location.href = this.next(r.user);
+      } catch (e) { FFA.toast(e.message, "err"); } finally { this.busy = false; }
+    },
+    async register() {
+      this.busy = true;
+      try {
+        const r = await FFA.api("/api/v1/auth/register", { method: "POST", body: { name: this.name, email: this.email, password: this.password }, auth: false });
+        FFA.signIn(r.token, r.user);
+        location.href = "/store";
+      } catch (e) { FFA.toast(e.message, "err"); } finally { this.busy = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

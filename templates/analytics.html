@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block head %}<script src="/static/vendor/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div x-data="analyticsPage()" x-init="init()">
+  <header class="mb-6">
+    <p class="text-sm text-ink-muted">Executive SDG Analytics</p>
+    <h1 class="font-display text-3xl font-bold">Impact over the last 90 nights</h1>
+  </header>
+
+  <!-- KPI tiles -->
+  <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <template x-for="k in kpis()" :key="k.label">
+      <div class="card">
+        <div class="text-xs uppercase tracking-wide text-ink-dim" x-text="k.label"></div>
+        <div class="kpi mt-1"><span x-text="k.value"></span><span class="ml-1 text-base font-medium text-ink-muted" x-text="k.unit"></span></div>
+        <div class="mt-1 text-xs text-ink-muted" x-text="k.hint"></div>
+      </div>
+    </template>
+  </section>
+
+  <section class="mt-4 grid gap-4 md:grid-cols-2">
+    <div class="card">
+      <div class="flex items-baseline justify-between"><h2 class="font-semibold">SDG 12.3 · Food-waste diversion index</h2><span class="kpi text-2xl" x-text="(d.impact?.sdg12_index ?? 0) + '%'"></span></div>
+      <div class="mt-3 h-2.5 rounded-full bg-night-700"><div class="h-2.5 rounded-full bg-olive" :style="`width:${d.impact?.sdg12_index || 0}%`"></div></div>
+      <p class="mt-2 text-xs text-ink-muted">Share of surplus received at dark stores that was eaten (sold or donated) rather than wasted.</p>
+    </div>
+    <div class="card">
+      <div class="flex items-baseline justify-between"><h2 class="font-semibold">SDG 2.1 · Relief delivery index</h2><span class="kpi text-2xl" x-text="(d.impact?.sdg2_index ?? 0) + '%'"></span></div>
+      <div class="mt-3 h-2.5 rounded-full bg-night-700"><div class="h-2.5 rounded-full bg-rescue" :style="`width:${d.impact?.sdg2_index || 0}%`"></div></div>
+      <p class="mt-2 text-xs text-ink-muted">Share of food routed to NGOs that reached people before its safety expiry.</p>
+    </div>
+  </section>
+
+  <!-- Timeline -->
+  <section class="card mt-6">
+    <h2 class="card-title">Where restaurant over-prep ends up, night by night</h2>
+    <p class="text-sm text-ink-muted">Servings per night across all partners. Over-prep is the surplus left when kitchens close; the other lines show where it went.</p>
+    <div class="mt-4 h-80"><canvas id="timeline" role="img" aria-label="Line chart of nightly over-prep, servings sold to night workers, donated to NGOs, and wasted over 90 nights"></canvas></div>
+    <details class="mt-3 text-sm">
+      <summary class="cursor-pointer text-ink-muted hover:text-ink">Show as table</summary>
+      <div class="mt-2 max-h-72 overflow-auto">
+        <table class="w-full text-xs tabular-nums">
+          <thead class="sticky top-0 bg-white"><tr><th class="table-head py-1">Night</th><th class="table-head">Over-prep</th><th class="table-head">Sold</th><th class="table-head">Donated</th><th class="table-head">Wasted</th><th class="table-head">CO₂e saved (kg)</th></tr></thead>
+          <tbody><template x-for="r in d.timeline || []" :key="r.date"><tr class="border-t border-night-700"><td class="py-1" x-text="r.date"></td><td x-text="r.overprep"></td><td x-text="r.rescued_sold"></td><td x-text="r.donated"></td><td x-text="r.wasted"></td><td x-text="r.co2e_kg"></td></tr></template></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-2">
+    <section class="card">
+      <h2 class="card-title">Demand pattern: surplus by day of week</h2>
+      <p class="text-sm text-ink-muted">Average surplus servings per night, all restaurants.</p>
+      <div class="mt-4 h-64"><canvas id="dow" role="img" aria-label="Bar chart of average surplus by weekday"></canvas></div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">Weather effect on surplus</h2>
+      <p class="text-sm text-ink-muted">Average surplus as % of food prepared. Rain keeps diners home while kitchens still cook as usual.</p>
+      <div class="mt-4 h-64"><canvas id="weather" role="img" aria-label="Bar chart of surplus percentage by weather condition"></canvas></div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">Temperature vs surplus</h2>
+      <p class="text-sm text-ink-muted">Each dot is one night.</p>
+      <div class="mt-4 h-64"><canvas id="scatter" role="img" aria-label="Scatter plot of nightly temperature against surplus percentage"></canvas></div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">NGO distribution totals</h2>
+      <p class="text-sm text-ink-muted">Servings distributed per partner NGO (history + tonight).</p>
+      <div class="mt-4 h-64"><canvas id="ngos" role="img" aria-label="Bar chart of servings distributed by each NGO"></canvas></div>
+    </section>
+  </div>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+    <section class="card">
+      <h2 class="card-title">Festivals and holidays drive waste</h2>
+      <p class="text-sm text-ink-muted">Average surplus % of food prepared.</p>
+      <div class="mt-4 grid grid-cols-3 gap-3 text-center">
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="(d.special_days?.regular ?? '–') + '%'"></div><div class="text-xs text-ink-muted">Regular nights</div></div>
+        <div class="rounded-xl border border-moon/40 bg-moon/5 p-3"><div class="kpi text-2xl text-moon" x-text="(d.special_days?.festival ?? '–') + '%'"></div><div class="text-xs text-ink-muted">Festival nights</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="(d.special_days?.holiday ?? '–') + '%'"></div><div class="text-xs text-ink-muted">Public holidays</div></div>
+      </div>
+      <p class="mt-4 text-sm text-ink-muted">Kitchens over-prep in anticipation of festival crowds. The forecaster learns this pattern and warns NGOs early.</p>
+    </section>
+    <section class="card">
+      <div class="flex flex-wrap items-baseline gap-2">
+        <h2 class="card-title">Forecast model card</h2>
+        <span class="text-xs text-ink-dim" x-text="d.model?.trained_at ? 'trained ' + d.model.trained_at.replace('T', ' ') : ''"></span>
+      </div>
+      <div class="mt-3 grid grid-cols-3 gap-3 text-center text-sm">
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.mae ?? '–'"></div><div class="text-xs text-ink-muted">MAE (servings)</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.baseline_mae ?? '–'"></div><div class="text-xs text-ink-muted">Naive baseline MAE</div></div>
+        <div class="rounded-xl bg-night-900/60 p-3"><div class="kpi text-2xl" x-text="d.model?.metrics?.r2 ?? '–'"></div><div class="text-xs text-ink-muted">R² (hold-out)</div></div>
+      </div>
+      <p class="mt-2 text-xs text-ink-dim" x-text="d.model?.rows ? `Random Forest (200 trees) · ${d.model.rows} rows · chronological hold-out of the last ${d.model.metrics?.validation_days} nights` : ''"></p>
+      <div class="mt-3 h-48"><canvas id="importance" role="img" aria-label="Feature importance of the surplus model"></canvas></div>
+    </section>
+  </div>
+  <p class="mt-6 text-xs text-ink-dim" x-text="d.impact ? `Assumptions: 1 serving ≈ ${d.impact.assumptions.kg_per_serving} kg; ${d.impact.assumptions.kg_co2e_per_kg_food} kg CO₂e avoided per kg of food kept out of landfill.` : ''"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function analyticsPage() {
+  return {
+    d: {},
+    init() { FFA.poll(() => this.load(), 30000); },
+    async load() {
+      try {
+        this.d = await FFA.api("/api/v1/analytics/dashboard", { auth: false });
+        this.$nextTick(() => this.draw());
+      } catch (e) { FFA.toast(e.message, "err"); }
+    },
+    kpis() {
+      const i = this.d.impact || {};
+      return [
+        { label: "Food rescued", value: FFA.fmt.n(i.meals_saved_kg), unit: "kg", hint: `${FFA.fmt.n(i.meals_saved_servings)} meals kept out of landfill` },
+        { label: "Emissions prevented", value: FFA.fmt.n(Math.round((i.co2e_prevented_kg || 0) / 100) / 10), unit: "t CO₂e", hint: "landfill methane avoided" },
+        { label: "Night workers served", value: FFA.fmt.n(i.night_workers_served), unit: "", hint: "orders after restaurants closed" },
+        { label: "People fed via NGOs", value: FFA.fmt.n(i.people_fed), unit: "", hint: `${FFA.fmt.n(i.servings_donated)} servings donated` },
+      ];
+    },
+    draw() {
+      const P = FFA.palette, d = this.d;
+      if (!d.timeline) return;
+      const labels = d.timeline.map((r) => FFA.fmt.dateShort(r.date));
+      const line = (label, key, color, extra = {}) => ({ label, data: d.timeline.map((r) => r[key]), borderColor: color, backgroundColor: color, ...extra });
+      FFA.chart("timeline", {
+        type: "line",
+        data: { labels, datasets: [
+          line("Restaurant over-prep", "overprep", P.blue),
+          line("Sold to night workers", "rescued_sold", P.orange),
+          line("Donated to NGOs", "donated", P.aqua),
+          line("Wasted", "wasted", P.yellow, { borderDash: [5, 4] }),
+        ] },
+        options: {
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { position: "top", align: "start" } },
+          scales: { x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "servings" } } },
+        },
+      });
+      FFA.chart("dow", {
+        type: "bar",
+        data: { labels: d.day_of_week.map((r) => r.day), datasets: [{ label: "Avg surplus servings", data: d.day_of_week.map((r) => r.avg_surplus), backgroundColor: P.brand, maxBarThickness: 36 }] },
+        options: { plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } },
+      });
+      FFA.chart("weather", {
+        type: "bar",
+        data: { labels: d.weather.map((r) => `${r.weather} (${r.nights})`), datasets: [{ label: "Surplus % of prep", data: d.weather.map((r) => r.avg_surplus_pct), backgroundColor: P.brand, maxBarThickness: 44 }] },
+        options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y}% of food prepared went unsold` } } },
+                   scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: (v) => v + "%" } } } },
+      });
+      FFA.chart("scatter", {
+        type: "scatter",
+        data: { datasets: [{ label: "Night", data: d.temperature_scatter.map((r) => ({ x: r.temperature, y: r.surplus_pct, w: r.weather })),
+                             backgroundColor: P.brand + "cc", borderColor: P.surface, borderWidth: 1, pointRadius: 5, pointHoverRadius: 7 }] },
+        options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.raw.w}, ${c.raw.x} °C: ${c.raw.y}% surplus` } } },
+                   scales: { x: { title: { display: true, text: "°C" } }, y: { beginAtZero: true, ticks: { callback: (v) => v + "%" } } } },
+      });
+      FFA.chart("ngos", {
+        type: "bar",
+        data: { labels: d.ngos.map((n) => n.ngo), datasets: [{ label: "Servings distributed", data: d.ngos.map((n) => n.servings), backgroundColor: P.brand, maxBarThickness: 28 }] },
+        options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (c) => `${FFA.fmt.n(d.ngos[c.dataIndex].people_fed)} people fed` } } },
+                   scales: { x: { beginAtZero: true }, y: { grid: { display: false } } } },
+      });
+      const imp = d.model?.feature_importance || [];
+      const names = { dish_category: "Dish category", is_festival: "Festival", weather_condition: "Weather", historical_avg_footfall: "Footfall",
+                      temperature: "Temperature", day_of_week: "Day of week", is_weekend: "Weekend", is_holiday: "Holiday" };
+      FFA.chart("importance", {
+        type: "bar",
+        data: { labels: imp.map((f) => names[f.feature] || f.feature), datasets: [{ label: "Importance", data: imp.map((f) => +(f.importance * 100).toFixed(1)), backgroundColor: P.olive, maxBarThickness: 18 }] },
+        options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.x}% of model splits` } } },
+                   scales: { x: { beginAtZero: true, ticks: { callback: (v) => v + "%" } }, y: { grid: { display: false } } } },
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

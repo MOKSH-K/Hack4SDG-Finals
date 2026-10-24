@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="ngoPage()" x-init="init()" x-cloak>
+  <header class="mb-6 flex flex-wrap items-end gap-4">
+    <div>
+      <p class="text-sm text-ink-muted">NGO Relief Portal</p>
+      <h1 class="flex items-center gap-2 font-display text-3xl font-bold">
+        <span x-text="o.ngo?.name || 'Loading…'"></span>
+        <template x-if="o.ngo?.verified"><span class="chip bg-rescue/15 text-rescue"><i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Verified</span></template>
+      </h1>
+      <p class="text-sm text-ink-muted" x-show="o.ngo" x-text="`${o.ngo?.area} · capacity ${o.ngo?.capacity_per_night} meals / night`"></p>
+    </div>
+    <div class="ml-auto flex gap-3 text-sm">
+      <div class="card px-4 py-2 text-center"><div class="kpi text-2xl text-moon" x-text="o.available?.length ?? 0"></div><div class="text-xs text-ink-muted">bundles open</div></div>
+      <div class="card px-4 py-2 text-center"><div class="kpi text-2xl text-rescue" x-text="FFA.fmt.n(availableServings())"></div><div class="text-xs text-ink-muted">servings to claim</div></div>
+    </div>
+  </header>
+
+  <!-- Early warning -->
+  <section class="card border-sky2/40" x-show="o.early_warning">
+    <div class="flex flex-wrap items-center gap-3">
+      <i data-lucide="radio" class="h-5 w-5 text-sky2"></i>
+      <h2 class="card-title">Early warning: tonight's predicted surplus</h2>
+      <span class="chip bg-sky2/15 text-sky2" x-text="ew().conditions ? `${ew().conditions.weather_condition}, ${ew().conditions.temperature} °C` : ''"></span>
+      <template x-if="ew().conditions?.festival"><span class="chip bg-moon/15 text-moon" x-text="ew().conditions.festival"></span></template>
+      <template x-if="ew().conditions?.holiday"><span class="chip bg-violet-500/10 text-violet-700" x-text="ew().conditions.holiday"></span></template>
+    </div>
+    <p class="mt-1 text-sm text-ink-muted">
+      Our forecast before kitchens close. About <span x-text="Math.round(100 * (ew().relief_share || 0))"></span>% of hub intake historically goes unsold and reaches NGOs.
+    </p>
+    <div class="mt-4 grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <div>
+        <div class="mb-4 grid grid-cols-3 gap-3">
+          <div class="rounded-xl bg-night-900/60 p-3"><div class="text-xs text-ink-dim">Predicted surplus</div><div class="kpi text-2xl" x-text="FFA.fmt.n(ew().total_predicted)"></div></div>
+          <div class="rounded-xl bg-night-900/60 p-3"><div class="text-xs text-ink-dim">Pre-notified (safe)</div><div class="kpi text-2xl" x-text="FFA.fmt.n(ew().total_prenotified)"></div></div>
+          <div class="rounded-xl border border-rescue/40 bg-rescue/5 p-3"><div class="text-xs text-ink-dim">Expected for NGOs</div><div class="kpi text-2xl text-rescue" x-text="FFA.fmt.n(ew().total_expected_relief)"></div></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[680px] text-sm">
+            <thead><tr class="border-b border-night-600"><th class="table-head py-2">Restaurant</th><th class="table-head">Closes</th><th class="table-head">Surplus (80% range)</th><th class="table-head">For NGOs</th><th class="table-head">Distance</th><th class="table-head">Why</th></tr></thead>
+            <tbody class="divide-y divide-night-700">
+              <template x-for="r in ew().restaurants || []" :key="r.restaurant_id">
+                <tr>
+                  <td class="py-2"><span class="font-medium" x-text="r.restaurant"></span><span class="block text-xs text-ink-dim" x-text="r.area"></span></td>
+                  <td class="tabular-nums" x-text="r.closing_time"></td>
+                  <td class="tabular-nums"><span x-text="r.zero_surplus ? 'None expected' : r.predicted_surplus"></span> <span class="text-xs text-ink-dim" x-show="!r.zero_surplus" x-text="`(${r.interval_80[0]}–${r.interval_80[1]})`"></span></td>
+                  <td class="font-semibold tabular-nums text-rescue" x-text="r.expected_relief_servings"></td>
+                  <td class="tabular-nums text-ink-muted" x-text="r.distance_km + ' km'"></td>
+                  <td class="text-xs text-ink-muted" x-text="r.drivers.slice(0, 2).map(d => d.text).join(' · ') || 'Typical night'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Proximity map (offline, schematic) -->
+      <figure>
+        <div x-html="mapSvg()"></div>
+        <figcaption class="mt-2 flex flex-wrap gap-3 text-xs text-ink-muted">
+          <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full border border-moon bg-moon/30"></span>Restaurant (size = forecast)</span>
+          <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-sky2"></span>Dark store</span>
+          <span class="flex items-center gap-1"><span class="inline-block h-2.5 w-2.5 rounded-full bg-rescue"></span>Your NGO</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <div class="mt-6 grid gap-6 xl:grid-cols-2">
+    <!-- Available bundles -->
+    <section>
+      <h2 class="mb-3 flex items-center gap-2 font-display text-xl font-semibold"><i data-lucide="package" class="h-5 w-5 text-moon"></i>Free relief bundles: claim now</h2>
+      <template x-if="!o.available?.length"><div class="card text-sm text-ink-muted">No open bundles right now. They appear here automatically when food reaches its NGO window or the 3:30 AM cut-off.</div></template>
+      <div class="space-y-3">
+        <template x-for="b in o.available || []" :key="b.id">
+          <article class="card p-4">
+            <div class="flex items-start gap-3">
+              <div class="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-moon/15 text-center">
+                <div><div class="font-display text-xl font-bold text-moon" x-text="b.servings"></div><div class="text-[10px] text-ink-muted">servings</div></div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <h3 class="font-semibold" x-text="b.dish_name"></h3>
+                <p class="text-xs text-ink-muted" x-text="`${FFA.fmt.label(b.diet)} · ${b.storage === 'HOT' ? 'hot-held' : 'chilled'} · from ${b.restaurant}`"></p>
+                <p class="text-xs text-ink-dim" x-text="b.allergens.length ? 'Allergens: ' + b.allergens.join(', ') : 'No declared allergens'"></p>
+                <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span class="chip bg-night-700 text-ink-muted" x-text="`${b.dark_store} · ${b.distance_km} km`"></span>
+                  <span class="chip tabular-nums" :class="secs(b) < 3600 ? 'bg-alert/15 text-alert' : 'bg-moon/15 text-moon'" x-text="'Safe for ' + FFA.fmt.dur(secs(b))"></span>
+                  <span class="chip font-mono" :class="b.haccp.verified ? 'bg-rescue/10 text-rescue' : 'bg-alert/15 text-alert'" x-text="b.haccp.tag"></span>
+                </div>
+              </div>
+              <button class="btn-primary shrink-0" @click="claim(b)" :disabled="busy">Claim</button>
+            </div>
+          </article>
+        </template>
+      </div>
+    </section>
+
+    <!-- My pipeline -->
+    <section>
+      <h2 class="mb-3 flex items-center gap-2 font-display text-xl font-semibold"><i data-lucide="truck" class="h-5 w-5 text-rescue"></i>Your relief pipeline</h2>
+      <template x-if="!o.mine?.length"><div class="card text-sm text-ink-muted">Nothing claimed yet tonight.</div></template>
+      <div class="space-y-3">
+        <template x-for="b in o.mine || []" :key="b.id">
+          <article class="card p-4">
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold" x-text="`${b.servings} × ${b.dish_name}`"></h3>
+              <span class="ml-auto font-mono text-xs text-ink-dim" x-text="b.code"></span>
+            </div>
+            <p class="text-xs text-ink-muted" x-text="`Collect from ${b.dark_store} (${b.distance_km} km)`"></p>
+            <ol class="mt-4 grid grid-cols-4 gap-1 text-center text-[11px]">
+              <template x-for="(st, i) in stages" :key="st.key">
+                <li>
+                  <div class="mb-1 h-1.5 rounded-full" :class="b.status === 'EXPIRED' ? 'bg-alert/60' : (stageIndex(b.status) >= i ? 'bg-rescue' : 'bg-night-600')"></div>
+                  <span :class="stageIndex(b.status) >= i ? 'text-ink' : 'text-ink-dim'" x-text="st.label"></span>
+                  <span class="block text-ink-dim tabular-nums" x-text="FFA.fmt.time(b[st.at]) === '—' ? '' : FFA.fmt.time(b[st.at])"></span>
+                </li>
+              </template>
+            </ol>
+            <div class="mt-4">
+              <template x-if="b.status === 'CLAIMED'">
+                <div class="flex flex-wrap items-center gap-2">
+                  <button class="btn-primary" @click="pickup(b)" :disabled="busy"><i data-lucide="truck" class="h-4 w-4"></i>Picked up</button>
+                  <button class="btn-ghost" @click="release(b)" :disabled="busy">Can't make it, release</button>
+                  <span class="ml-auto text-xs tabular-nums" :class="secs(b) < 3600 ? 'text-alert' : 'text-ink-muted'" x-text="'Safe for ' + FFA.fmt.dur(secs(b))"></span>
+                </div>
+              </template>
+              <template x-if="b.status === 'IN_TRANSIT'">
+                <form class="grid gap-2 sm:grid-cols-[1fr_7rem_auto]" @submit.prevent="distribute(b)">
+                  <input class="input" x-model="dist[b.id].shelter" placeholder="Shelter / distribution point" required minlength="2" aria-label="Shelter name">
+                  <input class="input" type="number" min="1" x-model.number="dist[b.id].people" placeholder="People fed" required aria-label="People fed">
+                  <button class="btn-primary" :disabled="busy">Distributed</button>
+                </form>
+              </template>
+              <template x-if="b.status === 'DISTRIBUTED'">
+                <p class="flex items-center gap-2 text-sm text-rescue"><i data-lucide="heart" class="h-4 w-4"></i><span x-text="`${b.people_fed} people fed at ${b.shelter_name}`"></span></p>
+              </template>
+              <template x-if="b.status === 'EXPIRED'">
+                <p class="text-sm text-alert">Expired before collection: logged as waste.</p>
+              </template>
+            </div>
+          </article>
+        </template>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function ngoPage() {
+  return {
+    o: {}, busy: false, fetchedAt: Date.now(), now: Date.now(), dist: {},
+    map: { w: 320, h: 260, pad: 28, bounds: null },
+    stages: [
+      { key: "FLAGGED", label: "Flagged", at: "flagged_at" },
+      { key: "CLAIMED", label: "Claimed", at: "claimed_at" },
+      { key: "IN_TRANSIT", label: "In transit", at: "picked_up_at" },
+      { key: "DISTRIBUTED", label: "Distributed", at: "distributed_at" },
+    ],
+    init() {
+      setInterval(() => (this.now = Date.now()), 1000);
+      FFA.poll(() => this.load(), 10000);
+    },
+    async load() {
+      try {
+        this.o = await FFA.api("/api/v1/ngo/overview");
+        this.fetchedAt = Date.now();
+        for (const b of this.o.mine) if (!this.dist[b.id]) this.dist[b.id] = { shelter: "", people: b.servings };
+        this.fitMap();
+      } catch (e) { FFA.toast(e.message, "err"); }
+    },
+    ew() { return this.o.early_warning || {}; },
+    availableServings() { return (this.o.available || []).reduce((s, b) => s + b.servings, 0); },
+    secs(b) { return FFA.remaining(b.clock, this.fetchedAt, this.now); },
+    stageIndex(s) { return this.stages.findIndex((x) => x.key === s); },
+    fitMap() {
+      const pts = [...(this.ew().restaurants || []), ...(this.o.dark_stores || []), this.o.ngo].filter(Boolean);
+      const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
+      this.map.bounds = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLng: Math.min(...lngs), maxLng: Math.max(...lngs) };
+    },
+    px(lng) {
+      const b = this.map.bounds; if (!b || lng === undefined) return 0;
+      return this.map.pad + ((lng - b.minLng) / (b.maxLng - b.minLng || 1)) * (this.map.w - 2 * this.map.pad - 50);
+    },
+    py(lat) {
+      const b = this.map.bounds; if (!b || lat === undefined) return 0;
+      return this.map.h - this.map.pad - ((lat - b.minLat) / (b.maxLat - b.minLat || 1)) * (this.map.h - 2 * this.map.pad);
+    },
+    mapSvg() {
+      if (!this.map.bounds) return "";
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const parts = [];
+      for (const r of this.ew().restaurants || []) {
+        const x = this.px(r.lng), y = this.py(r.lat), rad = 4 + Math.sqrt(r.predicted_surplus) / 2;
+        parts.push(`<circle cx="${x}" cy="${y}" r="${rad}" fill="#c8a24a" fill-opacity=".3" stroke="#9a6212" stroke-width="1.5"><title>${esc(r.restaurant)}: ${r.predicted_surplus} servings forecast</title></circle>`,
+                   `<text x="${x + rad + 3}" y="${y + 4}" fill="#5f6158" font-size="10">${esc(r.restaurant.split(" ")[0])}</text>`);
+      }
+      for (const s of this.o.dark_stores || []) {
+        const x = this.px(s.lng), y = this.py(s.lat);
+        parts.push(`<rect x="${x - 6}" y="${y - 6}" width="12" height="12" rx="3" fill="#2f6db5"><title>${esc(s.name)}: ${s.distance_km} km</title></rect>`,
+                   `<text x="${x + 9}" y="${y + 18}" fill="#2d332c" font-size="10">${esc(s.area)} hub</text>`);
+      }
+      const n = this.o.ngo;
+      parts.push(`<circle cx="${this.px(n.lng)}" cy="${this.py(n.lat)}" r="7" fill="#355e3b" stroke="#ffffff" stroke-width="2"></circle>`,
+                 `<text x="${this.px(n.lng) + 10}" y="${this.py(n.lat) + 14}" fill="#355e3b" font-size="10" font-weight="600">You</text>`);
+      return `<svg viewBox="0 0 ${this.map.w} ${this.map.h}" class="w-full rounded-xl border border-night-600 bg-[#fbfaf6]" role="img" aria-label="Schematic map of your NGO, dark stores and restaurants">${parts.join("")}</svg>`;
+    },
+    async act(fn, ok) {
+      this.busy = true;
+      try { const r = await fn(); FFA.toast(ok(r)); }
+      catch (e) { FFA.toast(e.message, e.status === 409 ? "warn" : "err"); }
+      finally { this.busy = false; this.load(); }
+    },
+    claim(b) {
+      this.act(() => FFA.api(`/api/v1/ngo/bundles/${b.id}/claim`, { method: "POST" }),
+        (r) => `Claimed ${r.servings} servings. Collect from ${r.dark_store}.`);
+    },
+    pickup(b) { this.act(() => FFA.api(`/api/v1/ngo/bundles/${b.id}/pickup`, { method: "POST" }), () => "Marked as picked up. Drive safe!"); },
+    release(b) { this.act(() => FFA.api(`/api/v1/ngo/bundles/${b.id}/release`, { method: "POST" }), () => "Released back to other NGOs"); },
+    distribute(b) {
+      const d = this.dist[b.id];
+      this.act(() => FFA.api(`/api/v1/ngo/bundles/${b.id}/distribute`, { method: "POST", body: { shelter_name: d.shelter, people_fed: d.people } }),
+        (r) => `${r.people_fed} people fed at ${r.shelter_name} 💚`);
+    },
+  };
+}
+</script>
+{% endblock %}

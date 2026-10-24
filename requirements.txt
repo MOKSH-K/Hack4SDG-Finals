@@ -1,0 +1,17 @@
+# Runtime (what Vercel installs). Dev/test tools live in requirements-dev.txt.
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic==2.14.1
+SQLAlchemy==2.1.6
+Jinja2==3.1.6
+tzdata==2026.5
+
+# Security
+PyJWT==2.15.1
+pwdlib[argon2]==0.3.1
+
+# ML
+scikit-learn==1.9.1
+pandas==3.1.0
+numpy==2.5.4
+joblib==1.6.0

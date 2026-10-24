@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="storePage()" x-init="init()">
+  <!-- Hours banner -->
+  <div class="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3"
+       :class="menu.open ? 'border-moon/40 bg-moon/10' : 'border-alert/40 bg-alert/10'">
+    <span class="grid h-9 w-9 place-items-center rounded-lg bg-night-900/50 text-moon"><i data-lucide="moon" class="h-5 w-5"></i></span>
+    <div>
+      <div class="font-semibold">
+        Late-night kitchen · <span x-text="`${hours.open} – ${hours.close}`"></span>
+        <span class="chip ml-2" :class="menu.open ? 'bg-rescue/15 text-rescue' : 'bg-alert/15 text-alert'" x-text="menu.open ? 'Open now' : 'Closed'"></span>
+      </div>
+      <div class="text-sm text-ink-muted">
+        Fresh surplus from top restaurants, held at safe temperatures. Unsold food goes to shelters at <span x-text="hours.ngo_cutoff"></span>.
+      </div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <label for="store" class="sr-only">Dark store</label>
+      <select id="store" class="input w-auto" x-model.number="storeId" @change="cart = []; load()">
+        <template x-for="s in menu.stores" :key="s.id"><option :value="s.id" x-text="`${s.name} (${s.area})`" :selected="s.id === storeId"></option></template>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[1fr_22rem]">
+    <section>
+      <!-- Filters -->
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <template x-for="d in diets" :key="d.v">
+          <button class="seg" :class="diet === d.v && 'seg-on'" @click="diet = d.v" x-text="d.label"></button>
+        </template>
+        <span class="mx-1 hidden h-6 w-px bg-night-600 sm:block"></span>
+        <label class="text-sm text-ink-muted" for="sort">Sort</label>
+        <select id="sort" class="input w-auto py-1.5" x-model="sort">
+          <option value="popular">Most popular</option>
+          <option value="ending">Ending soon</option>
+          <option value="price">Price: low to high</option>
+        </select>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <template x-for="item in visible()" :key="item.id">
+          <article class="card flex flex-col p-4" :class="item.status !== 'AVAILABLE' && 'opacity-60'">
+            <div class="flex items-start gap-2">
+              <span class="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-sm border-2" :class="dietTone(item.diet).border" :title="FFA.fmt.label(item.diet)">
+                <span class="h-1.5 w-1.5 rounded-full" :class="dietTone(item.diet).dot"></span>
+              </span>
+              <div class="min-w-0">
+                <h3 class="font-semibold leading-snug" x-text="item.dish_name"></h3>
+                <p class="text-xs text-ink-muted" x-text="item.restaurant"></p>
+              </div>
+              <span class="ml-auto shrink-0 font-display text-lg font-bold" x-text="FFA.fmt.money(item.price)"></span>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-1.5">
+              <template x-if="item.badge">
+                <span class="chip bg-moon/15 text-moon"><i data-lucide="flame" class="h-3 w-3"></i><span x-text="item.badge"></span></span>
+              </template>
+              <span class="chip bg-night-700 text-ink-muted">
+                <template x-if="item.storage === 'HOT'"><i data-lucide="flame" class="h-3 w-3 text-orange-600"></i></template>
+                <template x-if="item.storage !== 'HOT'"><i data-lucide="snowflake" class="h-3 w-3 text-sky2"></i></template>
+                <span x-text="item.storage === 'HOT' ? 'Hot-held' : 'Chilled'"></span>
+              </span>
+              <template x-if="item.haccp.verified">
+                <span class="chip bg-rescue/10 text-rescue" :title="item.haccp.tag"><i data-lucide="shield-check" class="h-3 w-3"></i>HACCP verified</span>
+              </template>
+            </div>
+
+            <p class="mt-2 text-xs text-ink-dim">
+              <span x-text="item.allergens.length ? 'Contains: ' + item.allergens.join(', ') : 'No declared allergens'"></span>
+            </p>
+
+            <div class="mt-auto pt-4">
+              <div class="mb-3 flex items-center justify-between text-xs">
+                <span :class="item.available_qty <= 3 ? 'font-semibold text-alert' : 'text-ink-muted'"
+                      x-text="item.status !== 'AVAILABLE' ? 'Sold out' : (item.available_qty <= 3 ? `Only ${item.available_qty} left!` : `${item.available_qty} portions left`)"></span>
+                <span class="flex items-center gap-1 tabular-nums" :class="secsToRelief(item) < 1800 ? 'text-moon' : 'text-ink-muted'" title="Time left on sale before this dish is routed to NGOs">
+                  <i data-lucide="timer" class="h-3.5 w-3.5"></i><span x-text="'On sale ' + FFA.fmt.dur(secsToRelief(item))"></span>
+                </span>
+              </div>
+              <template x-if="item.status === 'AVAILABLE'">
+                <div class="flex items-center gap-2">
+                  <template x-if="qtyInCart(item.id) === 0">
+                    <button class="btn-moon w-full" @click="add(item)"><i data-lucide="plus" class="h-4 w-4"></i>Add</button>
+                  </template>
+                  <template x-if="qtyInCart(item.id) > 0">
+                    <div class="flex w-full items-center justify-between rounded-xl border border-moon/50 px-1">
+                      <button class="btn px-3 text-moon" @click="dec(item.id)" aria-label="Remove one"><i data-lucide="minus" class="h-4 w-4"></i></button>
+                      <span class="font-semibold tabular-nums" x-text="qtyInCart(item.id)"></span>
+                      <button class="btn px-3 text-moon" @click="add(item)" aria-label="Add one" :disabled="qtyInCart(item.id) >= Math.min(10, item.available_qty)"><i data-lucide="plus" class="h-4 w-4"></i></button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </article>
+        </template>
+      </div>
+      <template x-if="loaded && !visible().length">
+        <div class="card mt-4 text-center text-ink-muted">Nothing matches right now. New surplus arrives as restaurants close; check back soon.</div>
+      </template>
+    </section>
+
+    <!-- Cart & tracking -->
+    <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
+      <div class="card">
+        <h2 class="card-title flex items-center gap-2"><i data-lucide="shopping-bag" class="h-5 w-5 text-moon"></i>Your order</h2>
+        <template x-if="!cart.length"><p class="mt-3 text-sm text-ink-muted">Your cart is empty.</p></template>
+        <ul class="mt-3 divide-y divide-night-600">
+          <template x-for="line in cart" :key="line.id">
+            <li class="flex items-center gap-2 py-2 text-sm">
+              <span class="font-semibold tabular-nums text-moon" x-text="line.qty + '×'"></span>
+              <span class="min-w-0 flex-1 truncate" x-text="line.name"></span>
+              <span class="tabular-nums" x-text="FFA.fmt.money(line.qty * line.price)"></span>
+            </li>
+          </template>
+        </ul>
+        <template x-if="cart.length">
+          <div class="mt-3 space-y-3">
+            <div class="flex justify-between border-t border-night-600 pt-3 font-semibold"><span>Total</span><span x-text="FFA.fmt.money(total())"></span></div>
+            <div><label class="label" for="addr">Deliver to</label><input id="addr" class="input" x-model="address" placeholder="Building, gate, desk…"></div>
+            <button class="btn-primary w-full" @click="checkout()" :disabled="busy || !menu.open">
+              <span x-text="busy ? 'Reserving your food…' : (signedInWorker() ? 'Place order' : 'Sign in to order')"></span>
+            </button>
+            <p class="text-xs text-ink-dim">Stock is locked the moment you check out, so nobody else can buy your portion.</p>
+          </div>
+        </template>
+      </div>
+
+      <template x-for="o in orders.slice(0, 3)" :key="o.id">
+        <div class="card">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold" x-text="o.code"></span>
+            <span class="text-xs text-ink-muted" x-text="'Placed ' + FFA.fmt.time(o.created_at)"></span>
+          </div>
+          <p class="mt-1 truncate text-xs text-ink-muted" x-text="o.items.map(i => i.qty + '× ' + i.dish_name).join(', ')"></p>
+          <ol class="mt-4 grid grid-cols-4 gap-1 text-center text-[11px]">
+            <template x-for="(st, i) in stages" :key="st.key">
+              <li>
+                <div class="mx-auto mb-1 h-1.5 rounded-full" :class="stageIndex(o.status) >= i ? 'bg-rescue' : 'bg-night-600'"></div>
+                <span :class="stageIndex(o.status) >= i ? 'text-ink' : 'text-ink-dim'" x-text="st.label"></span>
+              </li>
+            </template>
+          </ol>
+        </div>
+      </template>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function storePage() {
+  return {
+    menu: { stores: [], items: [], open: true }, hours: { open: "23:00", close: "05:00", ngo_cutoff: "03:30" },
+    storeId: null, loaded: false, fetchedAt: Date.now(), now: Date.now(),
+    diet: "ALL", sort: "popular", cart: [], address: "", busy: false, orders: [],
+    diets: [{ v: "ALL", label: "All" }, { v: "VEG", label: "Veg" }, { v: "NON_VEG", label: "Non-veg" }, { v: "VEGAN", label: "Vegan" }],
+    stages: [{ key: "PLACED", label: "Placed" }, { key: "PACKED", label: "Packed" }, { key: "OUT_FOR_DELIVERY", label: "On the way" }, { key: "DELIVERED", label: "Delivered" }],
+
+    init() {
+      setInterval(() => (this.now = Date.now()), 1000);
+      FFA.poll(() => this.load(), 10000);
+      if (this.signedInWorker()) FFA.poll(() => this.loadOrders(), 15000);
+    },
+    signedInWorker() { const u = FFA.user(); return u && (u.role === "worker" || u.role === "admin"); },
+    async load() {
+      try {
+        const q = this.storeId ? `?dark_store_id=${this.storeId}` : "";
+        const m = await FFA.api(`/api/v1/store/menu${q}`, { auth: false });
+        this.menu = m; this.hours = m.hours; this.storeId = m.dark_store_id;
+        this.fetchedAt = Date.now(); this.loaded = true;
+        // Drop cart lines whose stock vanished.
+        this.cart = this.cart.filter((l) => m.items.some((i) => i.id === l.id && i.status === "AVAILABLE"))
+          .map((l) => ({ ...l, qty: Math.min(l.qty, m.items.find((i) => i.id === l.id).available_qty) }));
+      } catch (e) { FFA.toast(e.message, "err"); }
+    },
+    async loadOrders() {
+      try { this.orders = await FFA.api("/api/v1/store/orders/mine"); } catch { /* not signed in */ }
+    },
+    secsToRelief(item) {
+      return Math.max(0, item.clock.seconds_to_relief - (this.now - this.fetchedAt) / 1000);
+    },
+    visible() {
+      let items = this.menu.items.filter((i) => this.diet === "ALL" || i.diet === this.diet);
+      const live = (i) => i.status === "AVAILABLE" ? 0 : 1;
+      const by = {
+        popular: (a, b) => live(a) - live(b) || b.popularity - a.popularity,
+        ending: (a, b) => live(a) - live(b) || a.clock.seconds_to_relief - b.clock.seconds_to_relief,
+        price: (a, b) => live(a) - live(b) || a.price - b.price,
+      }[this.sort];
+      return items.slice().sort(by);
+    },
+    dietTone(d) {
+      return { VEG: { border: "border-emerald-500", dot: "bg-emerald-500" }, VEGAN: { border: "border-lime-400", dot: "bg-lime-400" },
+               NON_VEG: { border: "border-red-500", dot: "bg-red-500" } }[d];
+    },
+    qtyInCart(id) { return (this.cart.find((l) => l.id === id) || {}).qty || 0; },
+    add(item) {
+      const line = this.cart.find((l) => l.id === item.id);
+      if (line) line.qty = Math.min(line.qty + 1, Math.min(10, item.available_qty));
+      else this.cart.push({ id: item.id, name: item.dish_name, price: item.price, qty: 1 });
+    },
+    dec(id) {
+      const line = this.cart.find((l) => l.id === id);
+      if (!line) return;
+      line.qty -= 1;
+      if (line.qty <= 0) this.cart = this.cart.filter((l) => l.id !== id);
+    },
+    total() { return this.cart.reduce((s, l) => s + l.qty * l.price, 0); },
+    stageIndex(s) { return this.stages.findIndex((x) => x.key === s); },
+    async checkout() {
+      if (!this.signedInWorker()) { location.href = "/login?next=/store"; return; }
+      if (this.address.trim().length < 5) { FFA.toast("Add a delivery address (building, gate or desk)", "warn"); return; }
+      this.busy = true;
+      try {
+        const o = await FFA.api("/api/v1/store/orders", { method: "POST", body: {
+          dark_store_id: this.storeId, delivery_address: this.address,
+          items: this.cart.map((l) => ({ batch_id: l.id, qty: l.qty })) } });
+        FFA.toast(`Order ${o.code} confirmed · ${FFA.fmt.money(o.total)}`);
+        this.cart = [];
+        this.orders.unshift(o);
+      } catch (e) {
+        FFA.toast(e.message, e.status === 409 ? "warn" : "err");
+      } finally {
+        this.busy = false;
+        this.load();
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

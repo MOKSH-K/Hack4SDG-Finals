@@ -1,0 +1,28 @@
+[x-cloak] { display: none !important; }
+
+.toast { transition: opacity .4s ease, transform .4s ease; }
+
+svg.lucide { display: inline-block; flex-shrink: 0; }
+
+/* Live tickers */
+.tick-pulse { animation: tickPulse 1.2s ease-out; }
+@keyframes tickPulse {
+  0% { color: #355e3b; text-shadow: 0 0 14px rgba(53, 94, 59, .35); }
+  100% { text-shadow: none; }
+}
+
+.live-dot { position: relative; }
+.live-dot::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 9999px;
+  border: 2px solid currentColor; opacity: .6; animation: ping 1.6s cubic-bezier(0, 0, .2, 1) infinite;
+}
+@keyframes ping { 75%, 100% { transform: scale(1.8); opacity: 0; } }
+
+/* Thin scrollbars */
+* { scrollbar-width: thin; scrollbar-color: #d5cdb9 transparent; }
+
+input[type="range"] { accent-color: #355e3b; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
