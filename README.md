@@ -1,264 +1,163 @@
-# FoodForAll 🌙
+<div align="center">
+
+# 🌙 FoodForAll
+
+### Predict. Rescue. Feed.
 
 **When the city's kitchens close, FoodForAll opens.**
+A late-night food platform that serves restaurant surplus to night-shift workers and routes every unsold meal to NGOs and shelters, before it's unsafe.
 
-Swiggy and Zomato stop delivering when restaurants shut, but restaurants still have surplus cooked food and night-shift workers still need to eat. FoodForAll connects the two and makes sure nothing is wasted:
+[🌐 Live Demo](https://food-for-all-frk.vercel.app/) · [🎥 Video Walkthrough](#) · [📂 Repository](https://github.com/Ron102008/FoodForAll)
 
-1. **Predict:** an ML model forecasts each partner restaurant's surplus before it closes, using weather, holidays, festivals and footfall. NGOs see tonight's volume early.
-2. **Collect:** restaurants dispatch surplus (with allergens, storage class and cook time) to temperature-controlled **dark stores**, which check it in at a verified temperature.
-3. **Serve:** night-shift workers (nurses, BPO, data-centre and security staff) order from live dark-store stock, **11 PM – 5 AM**.
-4. **Donate:** anything within 2 h of its safety expiry, or unsold at the **3:30 AM cut-off**, is automatically locked from sale and becomes a free **relief bundle**. Exactly one NGO can claim it, collect it and distribute it.
+![SDG 2](https://img.shields.io/badge/SDG%202-Zero%20Hunger-355e3b) ![SDG 12.3](https://img.shields.io/badge/SDG%2012.3-Halve%20Food%20Waste-9a6212) ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E?logo=scikitlearn&logoColor=white)
 
-Supports **UN SDG 2 (Zero Hunger)** and **SDG 12.3 (halve food waste)**.
+</div>
 
 ---
 
-## Quick start
+## 📖 About the Project
 
-Requires Python 3.10+ (developed on 3.14).
+Food delivery apps stop when restaurants close, but restaurants still have surplus cooked food, and **nurses, BPO teams, data-centre staff and security guards** still need to eat. Meanwhile, that surplus usually ends up in a landfill.
+
+**FoodForAll** closes that gap in one night-long loop:
+
+1. **Plan:** a machine-learning model forecasts each restaurant's leftovers *before* it closes, using live weather, festivals, public holidays and footfall.
+2. **Collect:** restaurants send surplus to temperature-controlled **dark stores**, which check it in at a verified safe temperature.
+3. **Serve:** night-shift workers order fresh restaurant food at a fair price, **11 PM – 5 AM**.
+4. **Share:** anything unsold 2 hours before its safe time ends, or at the **3:30 AM cut-off**, becomes a **free donation** that one verified NGO can claim, collect and deliver to a shelter.
+
+Nothing reaches a landfill.
+
+---
+
+## ✨ Key Features
+
+| For | What they get |
+|---|---|
+| 🍛 **Kitchen managers** | A 7-night outlook of expected leftovers with live weather and festivals filled in automatically, plain-English explanations (*"Diwali festival over-prep: +46% leftovers"*), a closing log and one-click dispatch to a dark store |
+| 🏬 **Dark-store managers** | Live hot-cabinet and fridge temperatures, delivery check-in that turns away unsafe food, a safety countdown for every dish, "Close for the night", and an activity log |
+| 🌙 **Night-shift workers** | A late-night menu with diet filters, popularity and "Only 2 left!" badges, instant reservation at checkout, and live order tracking |
+| 🤝 **NGO coordinators** | An early warning of tonight's expected food before kitchens close, a nearby-hubs map, and claim → pick up → deliver tracking with people-fed logging |
+| 📊 **Operations lead** | Access to every portal, SDG impact analytics, forecast accuracy, and safety drills |
+
+**Under the hood:**
+
+- 🔒 **No double-selling, no double-claiming.** Stock is reserved atomically: 25 simultaneous buyers for 5 portions means exactly 5 orders succeed. Only one NGO can claim each donation.
+- 🌡️ **Food safety enforced automatically.** Hot food must stay at or above 63 °C (max 6 h) and chilled food at or below 5 °C (max 24 h). Temperature problems shorten a dish's safe time, and serious ones discard it.
+- 🌦️ **Zero manual input.** Weather comes from [Open-Meteo](https://open-meteo.com/) (16-day forecast, refreshed hourly). Holidays and festivals come from a generated 2025–2031 Indian and Karnataka calendar.
+- 🗣️ **Plain language everywhere.** No codes or jargon on any page, and each person only sees the pages they use.
+
+---
+
+## 🧭 Try It Yourself
+
+Open the **[live site](https://food-for-all-frk.vercel.app/)** and use the **Quick sign-in** list on the login page. Every account uses the password **`foodforall2026`**.
+
+| Role | Account | Start here |
+|---|---|---|
+| Night-shift worker | `priya.sharma@foodforall.in` | Night Store |
+| Kitchen manager | `arvind.rao@foodforall.in` | Restaurant Hub |
+| Dark-store manager | `kiran.hegde@foodforall.in` | Dark Store |
+| NGO coordinator | `lakshmi.nair@foodforall.in` | NGO Portal |
+| Second NGO (try claiming the same donation) | `joseph.mathew@foodforall.in` | NGO Portal |
+| Operations lead (all portals) | `nikhil.menon@foodforall.in` | SDG Impact |
+
+> ⏳ **Note:** the hosted version runs on serverless infrastructure. The first visit after a quiet spell can take up to a minute while it wakes up, and sample data resets periodically.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python, **FastAPI**, Pydantic v2, SQLAlchemy 2 (SQLite) |
+| Machine learning | **scikit-learn** (Random Forest), pandas, NumPy |
+| Frontend | Jinja2, **Tailwind CSS**, Alpine.js, Chart.js, Lucide icons |
+| Security | Argon2 password hashing, JWT authentication, role-based access |
+| Data | Open-Meteo weather API, `holidays` package (Indian calendar) |
+| Hosting | **Vercel** |
+
+---
+
+## 🧠 How the Forecast Works
+
+- **Inputs:** weather, evening temperature, day of week, festivals, public holidays, restaurant size and dish category.
+- **Model:** a Random Forest trained on **a year of nightly history** across 7 restaurants, using real Bengaluru weather.
+- **Explanations:** each prediction comes with a likely range and the reasons behind it (*"Rain: +32% leftovers"*).
+- **Accuracy:** tested on 8 weeks of nights the model never saw. Average error is about **4.4 servings per dish category on ordinary nights** and **about 4.9 on festival nights**, against about 6.5 for a simple average.
+- **NGO promise:** NGOs are promised a safe portion of the forecast, with a reserve held back in case the night is busier.
+
+---
+
+## 🚀 Getting Started
 
 ```bash
-git clone https://github.com/Hussain13620/FoodForAll.git
+# 1. Clone
+git clone https://github.com/Ron102008/FoodForAll.git
 cd FoodForAll
-python3 -m venv .venv          # or: virtualenv .venv  (if python3-venv isn't installed)
-.venv/bin/pip install -r requirements.txt
+
+# 2. Install (Python 3.10+)
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+
+# 3. Run
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-Open **http://localhost:8000**. On first start the app automatically:
+Open **http://localhost:8000**. On first start the app creates its database, seeds a year of sample history, fetches live weather and trains the forecast model (about 20 seconds).
 
-- creates the SQLite database in `data/`;
-- seeds 7 restaurants, 3 dark stores, 4 NGOs, 23 user accounts, **a year (365 nights) of history** and a live "tonight" scenario;
-- trains the surplus model (about 15–20 s on first start; later starts load the saved model) and saves it to `data/surplus_model.joblib`.
+```bash
+# Run the test suite (34 tests, including race-condition tests)
+.venv/bin/python -m pytest -q
 
-On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\uvicorn`.
-
-To wipe everything and reseed: `.venv/bin/python seed_data.py --reset` (the model retrains on the next start).
-
-### Seeded accounts (password `foodforall2026` for all)
-
-| Role | Name | Email | Lands on |
-|---|---|---|---|
-| Night-shift worker | Priya Sharma | `priya.sharma@foodforall.in` | `/store` |
-| Restaurant (Midnight Biryani Co.) | Arvind Rao | `arvind.rao@foodforall.in` | `/restaurant` |
-| Restaurant (Tandoor Tales / Saffron Courtyard) | Harpreet Kaur / Deepa Kulkarni | `harpreet.kaur@…` / `deepa.kulkarni@…` | `/restaurant` |
-| Dark-store manager (Koramangala / Whitefield / HSR) | Kiran Hegde / Farhan Ali / Sneha Iyer | `kiran.hegde@…` / `farhan.ali@…` / `sneha.iyer@…` | `/darkstore` |
-| NGO coordinator (Annapoorna / Shelter Bridge / Sahaya) | Lakshmi Nair / Joseph Mathew / Ritu Bansal | `lakshmi.nair@…` / `joseph.mathew@…` / `ritu.bansal@…` | `/ngo` |
-| Operations lead (every portal) | Nikhil Menon | `nikhil.menon@foodforall.in` | `/analytics` |
-
-All emails are `@foodforall.in`. The login page's **Quick sign-in** list fills in the main accounts.
+# Wipe and reseed the sample data
+.venv/bin/python seed_data.py --reset
+```
 
 ---
 
-## 5-minute walkthrough
-
-1. **`/`** Live impact tickers (kg rescued, CO₂e, workers served, people fed) and the SDG 2 / SDG 12 indices.
-2. **`/restaurant`** (Arvind Rao, kitchen manager)
-   - The **7-night outlook** shows each night's live weather, festivals and expected leftovers. Nothing is typed in: weather comes from Open-Meteo and holidays and festivals from the 2025–2031 calendar.
-   - Click a night, or pick **8 Nov 2026 (Diwali)** under *Another date*. The forecast explains itself, e.g. *"Diwali festival over-prep: +46% leftovers"*.
-   - Enter a closing log, or click **Nothing left tonight** to see the zero-leftover path.
-   - Send leftovers with a 12-hour shelf life kept hot and watch it get limited to 6 hours.
-3. **`/darkstore`** (Kiran Hegde, hub manager)
-   - **Check in** the incoming delivery; try a temperature below 63 °C to see it turned away.
-   - **Close for the night**: everything still on sale is offered free to NGOs.
-   - Signed in as **Nikhil Menon** (operations lead), the **fridge / cabinet fault drills** show a temperature problem shortening every affected dish's safe time.
-4. **`/store`** (Priya Sharma, night-shift nurse) Add dishes and check out. Portions are held the moment you order; try buying more than is left.
-5. **`/ngo`** (Lakshmi Nair, NGO coordinator)
-   - The early warning shows tonight's expected food before kitchens close, with a map.
-   - Claim a donation, then move it through **Picked up → Delivered**.
-   - Sign in as `joseph.mathew@…` in a private window and try to claim the same donation: it's refused.
-6. **`/analytics`** year-long timeline, day-of-week, weather and festival effects, NGO totals, and "How accurate is our forecast?".
-
-Every page uses plain language, and the top menu shows each person only the pages they can use.
-
-**Open 24×7** (on by default, not shown anywhere in the UI) lets people order outside 11 PM–5 AM and limits the automatic cut-off to 03:30–05:00, so daytime walkthroughs aren't emptied. Set `FFA_OPEN_24X7=0` for strict night hours.
-
----
-
-## Architecture
+## 📁 Project Structure
 
 ```
 FoodForAll/
 ├── app/
-│   ├── main.py              FastAPI app, lazy startup (seed → train), background sweep loop (or per-request when serverless)
-│   ├── config.py            hours, cut-off, food-safety limits, impact factors (FFA_* env overrides)
-│   ├── database.py          SQLAlchemy engine (SQLite WAL), sessions, local-time helpers
-│   ├── models.py            ORM: batches, orders, relief bundles, telemetry, history logs…
-│   ├── schemas.py           Pydantic v2 request validation
-│   ├── security.py          Argon2 password hashing, JWT, role guards
-│   ├── ml/
-│   │   ├── forecaster.py    RandomForest pipeline, uncertainty, counterfactual explanations
-│   │   ├── synthetic.py     generative model of a restaurant night (seeds training data)
-│   │   ├── calendar_data.py loads the holiday/festival calendar + offline weather estimate
-│   │   └── india_calendar.json  2025–2031 calendar, generated by scripts/build_calendar.py
-│   ├── services/
-│   │   ├── weather.py       Open-Meteo forecast + archive, hourly refresh, evening classification
-│   │   ├── inventory.py     dispatch, intake, atomic checkout, shelf-life override
-│   │   ├── relief.py        NGO pipeline with claim locking
-│   │   ├── routing.py       periodic sweep: expiry → relief, cut-off, delivery progress
-│   │   ├── telemetry.py     simulated sensors + excursion handling
-│   │   ├── safety.py        shelf-life caps, safety clock, safety checks, operating hours
-│   │   ├── forecasting.py   training data, rolling footfall, automatic conditions, NGO early warning
-│   │   └── impact.py        SDG metrics
-│   └── routers/             auth, restaurant (+ /predict-surplus, /weather, /restaurant/outlook), darkstore, store, ngo, analytics, pages
-├── api/index.py             serverless entry point (exposes app.main:app)
-├── scripts/build_calendar.py  regenerates the 2025–2031 holiday/festival calendar
-├── scripts/build_icons.py   renders the favicon set from static/icons/favicon.svg (headless Chrome)
-├── templates/               Jinja2 + Tailwind + Alpine.js pages
-├── static/                  app.js (API client, plain-language labels, role-aware menu, icons, chart theme), css, icons/ (favicon set + web manifest), vendored libraries
-├── seed_data.py             one year of history + live scenario
-├── PROJECT_CONTEXT.md       handover notes: state, decisions, pending work
-└── tests/                   pytest suite (34 tests, including race conditions)
+│   ├── main.py          # FastAPI app, startup, background routing
+│   ├── ml/              # forecasting model, calendar, synthetic history
+│   ├── services/        # weather, inventory, NGO routing, food safety, impact
+│   └── routers/         # API + page routes for each role
+├── templates/           # pages: landing, store, restaurant, dark store, NGO, analytics
+├── static/              # JS, CSS, icons, vendored libraries
+├── scripts/             # calendar + icon generators
+├── seed_data.py         # one year of sample history + tonight's scenario
+└── tests/               # pytest suite
 ```
-
-**Stack:**
-- **Backend:** FastAPI (ASGI) with Pydantic v2, and SQLAlchemy 2 on SQLite.
-- **Security:** Argon2id passwords via `pwdlib`, JWT via PyJWT.
-- **ML:** scikit-learn, pandas, NumPy.
-- **Frontend:** Tailwind, Alpine.js, Chart.js, Lucide. The frontend libraries are vendored in `static/vendor/`, so the app runs offline.
-
-Interactive API docs: **http://localhost:8000/docs**.
-
-### Key API endpoints
-
-| Method | Path | Who |
-|---|---|---|
-| POST | `/api/v1/predict-surplus` (weather optional: filled in automatically) | public |
-| GET | `/api/v1/weather?on=YYYY-MM-DD` | public |
-| GET | `/api/v1/restaurant/outlook?days=7` | restaurant |
-| GET | `/api/v1/ml/model-info` · POST `/api/v1/ml/retrain` | public · restaurant |
-| GET / POST | `/api/v1/restaurant/overview`, `/daily-log`, `/dispatch` | restaurant |
-| GET / POST | `/api/v1/darkstore/overview`, `/batches/{id}/receive`, `/shelf-life`, `/discard`, `/sweep`, `/telemetry/excursion` | darkstore |
-| GET / POST | `/api/v1/store/menu`, `/orders`, `/orders/mine` | public menu · worker |
-| GET / POST | `/api/v1/ngo/overview`, `/bundles/{id}/claim`, `/pickup`, `/distribute`, `/release` | ngo |
-| GET | `/api/v1/impact/summary`, `/api/v1/analytics/dashboard` | public |
 
 ---
 
-## How the hard parts work
+## 🌍 Impact
 
-### Surplus forecasting (Module A)
-- **Features:**
-  - day of week and weekend flag
-  - weather condition (Clear / Cloudy / Rain / Heavy Rain / Heatwave) and temperature
-  - public holiday and festival flags, looked up from the calendar automatically
-  - 28-night rolling average footfall
-  - dish category
-- **Target:** surplus *per 100 diners*, scaled back by footfall at prediction time. This lets one model handle restaurants of any size, including ones smaller than any in the training data.
-- **Validation:** a rolling backtest over 4 windows of 14 nights each (the last 8 weeks). Each window is predicted by a model trained only on the nights before it. Errors are pooled and reported separately for ordinary and festival nights, because one fortnight is too small and seasonal to judge on. On the seeded data, average error per row (restaurant × dish category × night, about 22 servings of surplus):
+FoodForAll tracks food rescued (kg), CO₂e prevented, night-shift orders served, people fed through NGOs, and progress indices for:
 
-  | Predictor | Overall | Ordinary nights | Festival nights |
-  |---|---|---|---|
-  | This model | ≈ 4.5 servings | ≈ 4.4 | ≈ 4.9 |
-  | Per-category average | ≈ 6.5 | | |
-  | Oracle that knows the generating formula | ≈ 4.1 | ≈ 4.2 | ≈ 4.0 |
-
-  R² is about 0.75. Most of the remaining error is the deliberate night-to-night randomness in the seed data (the oracle's 4.1 is the floor), so the model is within about 0.4 servings of the best achievable.
-- **Uncertainty:** the spread across the forest's trees gives an 80% interval. The NGO pre-notification quantity holds back a 10–40% safety buffer based on that spread, so NGOs are never promised food that doesn't arrive.
-- **Explanations:** counterfactual. Each driver is re-predicted with that factor reset to a neutral night (clear, 28 °C, mid-week, no holiday or festival), and the difference is reported as text such as *"Heavy Rain (+45% surplus expected)"*.
-- **Edge cases:**
-  - A forecast under 3 servings returns an explicit zero-surplus result, and NGOs are not pre-notified.
-  - Weather the model has barely seen (for example Heatwave, absent from Aug–Oct history) comes with a low-confidence warning.
-
-### Automated weather
-- **Source:** [Open-Meteo](https://open-meteo.com/) (forecast up to 16 days ahead). It's free, needs no API key, and its licence requires the attribution shown in the footer.
-- **Refresh:** a background job pulls the forecast for the city about once an hour (`app/services/weather.py`). Each night is condensed into one condition from the 6–11 PM window, when diners decide whether to go out:
-
-  | Condition | Rule |
-  |---|---|
-  | Heatwave | day's peak ≥ 38 °C |
-  | Heavy Rain | ≥ 4 mm of rain in the evening |
-  | Rain | ≥ 0.5 mm, or at least two rainy hours |
-  | Cloudy | mostly overcast, foggy or drizzly hours |
-  | Clear | anything else |
-
-- **Used automatically by:** the restaurant forecast and its 7-night outlook, the NGO early warning, and restaurant closing logs. Kitchen managers never enter weather. The prediction API still accepts optional `weather_condition`/`temperature` overrides for what-if checks.
-- **Seeding:** the year of history uses real past weather from Open-Meteo's archive endpoint.
-- **Fallback:** if the API is unreachable, the app uses cached data, then a seasonal estimate. Set `FFA_WEATHER_PROVIDER=offline` to never call the network (the tests do this).
-
-### Holiday and festival calendar (2025–2031)
-- **Data file:** `app/ml/india_calendar.json` holds public holidays (national plus Karnataka) and festivals for 2025–2031. The forecaster uses both automatically.
-- **Generation:** it's built by `scripts/build_calendar.py` from the maintained [`holidays`](https://pypi.org/project/holidays/) package, which computes lunar and Islamic dates, plus a few fixed dates (Kannada Rajyotsava, Halloween, New Year's Eve, Valentine's Day). Navratri is derived as the nine nights before Dussehra.
-- **Uncertain dates:** far-future Islamic dates are marked "(estimated)" because they depend on moon sighting.
-- **Extending:** to cover more years, edit `LAST_YEAR` and run `.venv/bin/python scripts/build_calendar.py` (needs `requirements-dev.txt`).
-
-### Atomic reservations (Modules B and C)
-- **Checkout:** each line is a conditional `UPDATE … SET available_qty = available_qty - :q WHERE available_qty >= :q AND status = 'AVAILABLE' AND expires_at > now`. If any line matches 0 rows, the whole order rolls back. On SQLite, writes run inside `BEGIN IMMEDIATE`.
-- **NGO claims:** `UPDATE … WHERE status = 'FLAGGED'`, so exactly one claim can win.
-- **Moving stock to relief:** the conversion is conditioned on the quantity it read, so a checkout that slips in between can never cause sold food to be donated.
-- **Tests:** `tests/test_core.py` fires 25 concurrent checkouts at 5 portions (exactly 5 succeed) and 12 concurrent NGO claims at one bundle (exactly 1 wins).
-
-### Food safety (Module D)
-
-| Rule | Value |
-|---|---|
-| Hot-held | ≥ 63 °C, max 6 h after cooking |
-| Chilled | ≤ 5 °C, max 24 h after cooking |
-| Declared shelf life | capped at the storage-class maximum |
-| Intake temperature outside range | batch is rejected |
-| Moves to NGO relief | 2 h before safety expiry, or at the 03:30 cut-off |
-| Minor excursion (chilled ≤ 10 °C / hot ≥ 50 °C) | use-by pulled to now + 2 h |
-| Critical excursion | batch is discarded and never reaches anyone |
-| Manual shelf-life override | may shorten freely; may never extend past the safety cap, or extend at all after an excursion |
-
-- **Safety checks:** every batch carries a list of checks (allergens listed, storage class, temperature on arrival, no temperature problems, within safe time). The UI shows "Safety checked" or the first failed check in plain words. The internal `HACCP-…` tag stays in the API and never appears on screen.
-- **Background sweep:** every 30 s it records simulated sensor readings, routes or expires batches, expires uncollected relief bundles, and moves orders through Placed → Packed → On the way → Delivered.
-
-### Impact metrics
-
-| Metric | Definition |
-|---|---|
-| Meals saved | servings sold to night workers + servings distributed by NGOs |
-| kg rescued | meals saved × 0.35 kg per serving |
-| CO₂e prevented | kg rescued × 2.5 kg CO₂e per kg of food kept out of landfill |
-| SDG 12 index | share of dark-store intake that was eaten rather than wasted |
-| SDG 2 index | share of relief food that reached people before its expiry |
-
-Both conversion factors are stated assumptions; edit them in `app/config.py`.
+- **SDG 2: Zero Hunger.** The share of donated food that reached people before its safe time ran out.
+- **SDG 12.3: Halve Food Waste.** The share of collected surplus that was eaten rather than wasted.
 
 ---
 
-## Configuration
+## ⚠️ What's Simulated
 
-| Env var | Default | Meaning |
-|---|---|---|
-| `FFA_OPEN_24X7` | `1` | Allow ordering 24×7; limit the automatic cut-off to 03:30–05:00 |
-| `FFA_DATABASE_URL` | `sqlite:///data/foodforall.db` | SQLAlchemy URL |
-| `FFA_DATA_DIR` | `data/` (`/tmp/foodforall` on Vercel) | Where the SQLite database and saved model live |
-| `FFA_JWT_SECRET` | random per process | **Set this in production.** Otherwise tokens are invalidated on restart. |
-| `FFA_RELIEF_LEAD_HOURS` | `2` | How long before expiry food moves to NGO relief |
-| `FFA_SWEEP_INTERVAL` | `30` | Background sweep period (seconds) |
-| `FFA_TIMEZONE` | `Asia/Kolkata` | All operational times are local to this zone |
-| `FFA_WEATHER_PROVIDER` | `open-meteo` | `offline` = seasonal estimate only, no network |
-| `FFA_WEATHER_LAT` / `FFA_WEATHER_LNG` | Bengaluru | Location used for weather |
-| `FFA_WEATHER_REFRESH_MINUTES` | `60` | How often to refresh the forecast |
+- **Data:** restaurants, accounts, orders and history are sample data generated for demonstration. The forecasting pipeline is real and retrains on actual closing logs.
+- **Sensors:** temperature sensor readings are simulated.
+- **Weather and calendar:** both are real (Open-Meteo and the `holidays` package).
 
-## Tests
+---
 
-```bash
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q
-```
+## 🙏 Acknowledgements
 
-## Deployment (Vercel)
+- Weather data by [Open-Meteo.com](https://open-meteo.com/)
+- Holiday calendar generated with [python-holidays](https://pypi.org/project/holidays/)
 
-- **Setup:** the Vercel project `food-for-all` is connected to this GitHub repo, so every push to `main` deploys automatically to https://food-for-all-self.vercel.app.
-- **How Vercel runs it:** it detects the project as **FastAPI** (framework preset) and serves the whole app as one function from `requirements.txt`.
-- **No `vercel.json`:** Vercel now routes rewritten requests to the *rewritten* path, so a catch-all rewrite sends every page to a route that doesn't exist (`{"detail":"Not Found"}`).
-- **Required environment variable:** `FFA_JWT_SECRET` (set in the Vercel project). Without it, each new instance invalidates logins.
-- **Serverless behaviour:** Vercel sets `VERCEL`, which makes the app keep its database and model in `/tmp`, start lazily on the first request, and run the expiry/donation sweep on incoming requests instead of a background loop.
-- **Limitations:**
-  - Data is per instance and resets when Vercel recycles it.
-  - The first request after a quiet spell takes about 40 s while it seeds a year of history and trains the model.
-  - For persistent data, point `FFA_DATABASE_URL` at a hosted Postgres database.
+<div align="center">
 
-## What's simulated (be upfront with judges)
+**Built with 💚 for the night shift**
 
-- **Data:** all seeded data (partners, accounts, orders and history) is synthetic and fictional, though nothing in the UI labels it so. It is produced by an explicit generative model (`app/ml/synthetic.py`). The ML pipeline is real and will retrain on real closing logs: every restaurant log is stored and used by `POST /api/v1/ml/retrain`.
-- **Weather:** real (Open-Meteo), with an offline seasonal estimate only as a fallback.
-- **Calendar:** generated from the `holidays` package; far-future Islamic dates are estimates.
-- **Sensors:** temperature readings are simulated.
-- **Map:** the NGO map is schematic (no tile server), so the app stays offline.
-- **Fonts:** load from Google Fonts when online and fall back to system fonts when offline.
-- **Tailwind:** uses the in-browser Play CDN build. For production, compile the CSS with the Tailwind CLI.
-- **Partner onboarding:** self-registration is for night workers only. Hotels, dark stores and NGOs are onboarded by an admin, since they need verification.
+</div>
