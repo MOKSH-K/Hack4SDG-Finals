@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌙 FoodForAll
+# # <img src="static/icons/favicon.svg" width="40" align="center" alt="FoodForAll logo"> FoodForAll
 
 ### Predict. Rescue. Feed.
 
