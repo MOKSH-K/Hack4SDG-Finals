@@ -156,6 +156,11 @@ FoodForAll tracks food rescued (kg), CO₂e prevented, night-shift orders served
 - Weather data by [Open-Meteo.com](https://open-meteo.com/)
 - Holiday calendar generated with [python-holidays](https://pypi.org/project/holidays/)
 
+TEAM MEMBERS-
+  1. Rohan Naik
+  2. Moksh Karamchandani
+  3. Hussain
+
 <div align="center">
 
 **Built with 💚 for the night shift**
